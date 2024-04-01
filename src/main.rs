@@ -26,13 +26,13 @@ pub struct Program {
 fn main() {
     // let mut program = PROGRAM.to_owned();
 
-    let program = Program::parse();
+    let args = Program::parse();
     // Either open the file or use the program string.
-    let mut program = match program.program {
-        Some(program) => program,
+    let mut program = match args.program {
+        Some(ref program) => program.clone(),
         None => {
-            match program.program_name {
-                Some(program_name) => {
+            match args.program_name {
+                Some(ref program_name) => {
                     std::fs::read_to_string(program_name).unwrap()
                 },
                 None => {
@@ -183,12 +183,9 @@ fn main() {
             let e = env.eval(e.clone());
             // print!("{}", e);
             match e {
-                Expr::Int(i) => print!("{}", i),
-                Expr::Float(f) => print!("{}", f),
                 Expr::String(s) => print!("{}", s),
-                Expr::Bool(b) => print!("{}", b),
-                Expr::List(l) => print!("{:?}", l),
-                _ => print!("{:?}", e)
+                Expr::Symbol(s) => print!("{}", s.name()),
+                _ => print!("{}", e)
             }
         }
         println!();
@@ -227,5 +224,8 @@ fn main() {
     // println!("Expr: {}", e);
     // println!("Expr: {:?}", e);
     // println!("Result: {}", env.eval(e));
-    env.eval(e);
+    let result = env.eval(e);
+    if args.program.is_some() && result != Expr::None {
+        println!("{}", result);
+    }
 }

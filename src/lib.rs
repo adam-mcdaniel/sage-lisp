@@ -285,6 +285,9 @@ impl Expr {
             let mut list = Vec::new();
             let mut input = &mut input[1..];
             loop {
+                if input.is_empty() {
+                    return Err("Mismatching parentheses".to_string());
+                }
                 // Skip whitespace
                 while input.starts_with(' ') {
                     input = &mut input[1..];
@@ -373,6 +376,9 @@ impl Expr {
 
             let mut args_list = Vec::new();
             while !input.starts_with('|') {
+                if input.is_empty() {
+                    return Err("No function body, missing |".to_string());
+                }
                 let (i, arg) = Expr::parse(input)?;
                 input = i;
                 args_list.push(arg);

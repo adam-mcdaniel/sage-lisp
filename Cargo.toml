@@ -5,7 +5,7 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [[bin]]
-name = "lisp"
+name = "sagel"
 path = "src/main.rs"
 required-features = ["build-binary"]
 
