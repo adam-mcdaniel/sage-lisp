@@ -8,7 +8,7 @@ use std::{
         Hasher,
     },
     sync::{Arc, RwLock},
-    fmt::{Display, Formatter, Result as FmtResult},
+    fmt::{Display, Debug, Formatter, Result as FmtResult},
 };
 
 use lazy_static::lazy_static;
@@ -18,7 +18,7 @@ lazy_static! {
 }
 
 /// A symbol that uses string interning
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Hash, Eq, Ord)]
 pub struct Symbol(Arc<String>);
 
 impl Symbol {
@@ -38,8 +38,36 @@ impl Symbol {
     pub fn name(&self) -> &str {
         &self.0
     }
+
+    /// Get an iterator over all symbols
+    pub fn all_symbols() -> Vec<Symbol> {
+        SYMBOLS.read().unwrap().values().cloned().collect()
+    }
 }
 
+impl PartialEq for Symbol {
+    fn eq(&self, other: &Self) -> bool {
+        if Arc::ptr_eq(&self.0, &other.0) {
+            return true;
+        }
+        self.0 == other.0
+    }
+}
+
+impl PartialOrd for Symbol {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if Arc::ptr_eq(&self.0, &other.0) {
+            return Some(std::cmp::Ordering::Equal);
+        }
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl Debug for Symbol {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "{}", self.0)
+    }
+}
 
 /// An environment for evaluating lisp expressions
 #[derive(Debug, Default, Clone)]
@@ -91,7 +119,6 @@ impl Env {
 
     /// Evaluate an expression in this environment
     pub fn eval(&mut self, mut expr: Expr) -> Expr {
-        // println!("Evaluating {expr} in {self:?}");
         use Expr::*;
         loop {
             if let Some(value) = self.get(&expr) {
@@ -115,6 +142,10 @@ impl Env {
                                 self.merge(&new_env);
                             }
 
+                            if params.len() != args.len() {
+                                return Expr::Err(Box::new(Expr::String(format!("Expected {} arguments, got {}", params.len(), args.len()))));
+                            }
+
                             for (param, arg) in params.iter().zip(args.iter()) {
                                 let arg = self.eval(arg.clone());
                                 self.bind(param.clone(), arg);
@@ -125,8 +156,42 @@ impl Env {
                         Builtin(f) => {
                             return (f.f)(self, &args);
                         },
+                        Tree(t) => {
+                            // Get the element of the tree
+                            let key = self.eval(args.get(0).unwrap().clone());
+
+                            if let Some(value) = t.get(&key) {
+                                return value.clone();
+                            } else {
+                                return Expr::None;
+                            }
+                        },
+                        Map(m) => {
+                            // Get the element of the map
+                            let key = self.eval(args.get(0).unwrap().clone());
+
+                            if let Some(value) = m.get(&key) {
+                                return value.clone();
+                            } else {
+                                return Expr::None;
+                            }
+                        },
                         _ => return Expr::Err(Box::new(Expr::String(format!("Cannot call {}", func)))),
                     }
+                },
+                Map(m) => {
+                    let mut new_map = HashMap::new();
+                    for (k, v) in m.iter() {
+                        new_map.insert(k.clone(), self.eval(v.clone()));
+                    }
+                    return Expr::Map(new_map);
+                },
+                Tree(t) => {
+                    let mut new_tree = BTreeMap::new();
+                    for (k, v) in t.iter() {
+                        new_tree.insert(k.clone(), self.eval(v.clone()));
+                    }
+                    return Expr::Tree(new_tree);
                 },
                 Quote(e) => {
                     return *e.clone();
@@ -158,6 +223,10 @@ impl Builtin {
             name,
         }
     }
+
+    pub fn apply(&self, env: &mut Env, args: &[Expr]) -> Expr {
+        (self.f)(env, args)
+    }
 }
 
 impl Display for Builtin {
@@ -167,7 +236,7 @@ impl Display for Builtin {
 }
 
 fn is_valid_symbol_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' || c == '*' || c == '/' || c == '%' || c == '!' || c == '?' || c == '=' || c == '<' || c == '>'
+    c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' || c == '*' || c == '/' || c == '\\' || c == '%' || c == '!' || c == '?' || c == '=' || c == '<' || c == '>' || c == '^'
 }
 
 /// A lisp expression to be evaluated
@@ -206,7 +275,33 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn parse(mut input: &mut str) -> Result<(&mut str, Expr), String> {
+    pub fn parse(input: &str) -> Result<Expr, String> {
+        let mut input = Self::remove_comments(input);
+        let (input, expr) = Self::parse_helper(&mut input)?;
+        if input.is_empty() {
+            return Ok(expr);
+        } else {
+            return Err("Could not parse input".to_string());
+        }
+    }
+
+    fn remove_comments(input: &str) -> String {
+        let mut input = input;
+        let mut output = String::new();
+        while !input.is_empty() {
+            if input.starts_with(';') {
+                let end = input.find('\n').unwrap_or(input.len());
+                input = &input[end..];
+            } else {
+                let end = input.find(';').unwrap_or(input.len());
+                output.push_str(&input[..end]);
+                input = &input[end..];
+            }
+        }
+        output
+    }
+
+    fn parse_helper(mut input: &mut str) -> Result<(&mut str, Expr), String> {
         while input.starts_with(' ') || input.starts_with('\n') || input.starts_with('\t') {
             input = &mut input[1..];
         }
@@ -221,11 +316,6 @@ impl Expr {
         let mut first_token = input.split_whitespace().next().ok_or("Could not parse input")?.to_owned();
         first_token = first_token.chars().take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
         
-        if let Ok(f) = first_token.parse::<f64>() {
-            // Move the input past the number
-            let input = &mut input[first_token.len()..];
-            return Ok((input, Expr::Float(f)));
-        }
 
         if let Ok(i) = first_token.parse::<i64>() {
             // Move the input past the number
@@ -233,18 +323,12 @@ impl Expr {
             return Ok((input, Expr::Int(i)));
         }
 
-        // if let Ok(f) = input.parse::<f64>() {
-        //     // Move the input past the number
-        //     let input = &mut input[f.to_string().len()..];
-        //     return Ok((input, Expr::Float(f)));
-        // }
-
-        // if let Ok(i) = input.parse::<i64>() {
-        //     // Move the input past the number
-        //     let input = &mut input[i.to_string().len()..];
-        //     return Ok((input, Expr::Int(i)));
-        // }
-
+        if let Ok(f) = first_token.parse::<f64>() {
+            // Move the input past the number
+            let input = &mut input[first_token.len()..];
+            return Ok((input, Expr::Float(f)));
+        }
+        
         if input.starts_with("nil") {
             // Move the input past the symbol
             let input = &mut input["nil".len()..];
@@ -276,7 +360,7 @@ impl Expr {
         // Parse a quoted expression
         if input.starts_with('\'') {
             // Parse the quoted expression
-            let (input, expr) = Expr::parse(&mut input[1..])?;
+            let (input, expr) = Expr::parse_helper(&mut input[1..])?;
             return Ok((input, Expr::Quote(Box::new(expr))));
         }
 
@@ -289,7 +373,7 @@ impl Expr {
                     return Err("Mismatching parentheses".to_string());
                 }
                 // Skip whitespace
-                while input.starts_with(' ') {
+                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
                     input = &mut input[1..];
                 }
 
@@ -299,7 +383,7 @@ impl Expr {
                     return Ok((input, Expr::List(list)));
                 }
 
-                let (new_input, expr) = Expr::parse(input)?;
+                let (new_input, expr) = Expr::parse_helper(input)?;
                 input = new_input;
                 list.push(expr);
             }
@@ -311,7 +395,7 @@ impl Expr {
             let mut input = &mut input[1..];
             loop {
                 // Skip whitespace
-                while input.starts_with(' ') {
+                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
                     input = &mut input[1..];
                 }
 
@@ -321,15 +405,15 @@ impl Expr {
                     return Ok((input, Expr::Tree(tree)));
                 }
 
-                let (new_input, key) = Expr::parse(input)?;
+                let (new_input, key) = Expr::parse_helper(input)?;
                 input = new_input;
 
                 // Skip whitespace
-                while input.starts_with(' ') {
+                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
                     input = &mut input[1..];
                 }
 
-                let (new_input, value) = Expr::parse(input)?;
+                let (new_input, value) = Expr::parse_helper(input)?;
                 input = new_input;
 
                 tree.insert(key, value);
@@ -342,7 +426,7 @@ impl Expr {
             let mut input = &mut input[1..];
             loop {
                 // Skip whitespace
-                while input.starts_with(' ') {
+                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
                     input = &mut input[1..];
                 }
 
@@ -352,21 +436,22 @@ impl Expr {
                     return Ok((input, Expr::Map(map)));
                 }
 
-                let (new_input, key) = Expr::parse(input)?;
+                let (new_input, key) = Expr::parse_helper(input)?;
                 input = new_input;
 
                 // Skip whitespace
-                while input.starts_with(' ') {
+                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
                     input = &mut input[1..];
                 }
 
-                let (new_input, value) = Expr::parse(input)?;
+                let (new_input, value) = Expr::parse_helper(input)?;
                 input = new_input;
 
                 map.insert(key, value);
             }
         }
 
+        /*
         // Try to parse as a function
         if input.starts_with("fn") {
             // Parse the arguments
@@ -379,7 +464,7 @@ impl Expr {
                 if input.is_empty() {
                     return Err("No function body, missing |".to_string());
                 }
-                let (i, arg) = Expr::parse(input)?;
+                let (i, arg) = Expr::parse_helper(input)?;
                 input = i;
                 args_list.push(arg);
                 // Remove leading whitespace
@@ -394,14 +479,12 @@ impl Expr {
             }
 
             // Make body mutable so we can update it
-            let (input, body) = Expr::parse(input)?;
+            let (input, body) = Expr::parse_helper(input)?;
             // This parses functions of the form:
             // fn a b c | body
             return Ok((input, Expr::Function(None, args_list, Box::new(body))));
         }
-
-        
-        
+         */
 
         // Try to parse as a symbol
         let mut symbol = String::new();
@@ -426,6 +509,7 @@ impl PartialEq for Expr {
             (Builtin(f1), Builtin(f2)) => f1 as *const _ == f2 as *const _,
             (Float(f1), Float(f2)) => f1.to_bits() == f2.to_bits(),
             (Int(i1), Int(i2)) => i1 == i2,
+            (Int(i), Float(f)) | (Float(f), Int(i)) => *f == *i as f64,
             (String(s1), String(s2)) => s1 == s2,
             (Symbol(s1), Symbol(s2)) => s1 == s2,
             (List(l1), List(l2)) => l1 == l2,
@@ -447,6 +531,8 @@ impl PartialOrd for Expr {
             (None, None) => Some(std::cmp::Ordering::Equal),
             (Float(f1), Float(f2)) => f1.partial_cmp(f2),
             (Int(i1), Int(i2)) => i1.partial_cmp(i2),
+            (Int(i), Float(f)) => (*i as f64).partial_cmp(f),
+            (Float(f), Int(i)) => f.partial_cmp(&(*i as f64)),
             (String(s1), String(s2)) => s1.partial_cmp(s2),
             (Symbol(s1), Symbol(s2)) => s1.partial_cmp(s2),
             (List(l1), List(l2)) => l1.partial_cmp(l2),
@@ -534,7 +620,7 @@ impl Display for Expr {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}:{}", k, v)?;
+                    write!(f, "{} {}", k, v)?;
                 }
                 write!(f, "]")
             },
@@ -544,19 +630,19 @@ impl Display for Expr {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}:{}", k, v)?;
+                    write!(f, "{} {}", k, v)?;
                 }
                 write!(f, "}}")
             },
             Function(_, args, body) => {
-                write!(f, "fn ")?;
+                write!(f, "(lambda (")?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
                     write!(f, "{}", arg)?;
                 }
-                write!(f, " | {} ", body)
+                write!(f, ") {})", body)
             },
             Builtin(b) => write!(f, "<builtin {}>", b.name),
         }
