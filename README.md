@@ -11,12 +11,12 @@ This crate implements a standalone Lisp implementation, intended for use in the 
 
     (defun stirlings (n)
         (if (<= n 0) 1
-            (* (sqrt (* 2 3.14159265358979323846 n))
-               (pow (/ n 2.71828182845904523536) n))))
+            (* (sqrt (* 2 3.14159 n))
+               (pow (/ n 2.718281) n))))
 
     (print-fact 5)
     
-    (println "Stirling's approximation for 5! = " (stirlings 5)))
+    (println "Stirling's approx. for 5! = " (stirlings 5)))
 ```
 
 ## Usage
