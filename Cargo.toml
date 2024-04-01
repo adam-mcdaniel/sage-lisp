@@ -1,0 +1,21 @@
+[package]
+name = "lisp"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "lisp"
+path = "src/main.rs"
+required-features = ["build-binary"]
+
+# Add a dependency for the binary
+[features]
+build-binary = ["clap"]
+clap = ["dep:clap"]
+
+[dependencies]
+tracing = "0.1"
+lazy_static = "1.4"
+clap = { version = "^4.5.4", optional = true, features = ["derive"] }
+clap_derive = { version = "^4.5.4", optional = true }
