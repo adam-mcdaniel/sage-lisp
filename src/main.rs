@@ -1,16 +1,9 @@
+
 use lisp::*;
 use clap::Parser;
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
 
-// const PROGRAM: &str = r#"
-// (do
-//     (defun fact (n) 
-//         (if (<= n 0) 1 
-//             (do 
-//                 (* n (fact (- n 1))))))
-//     (defun print-fact (n) (println n "! = " (fact n)))
-
-//     (print-fact 5))
-// "#;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -23,28 +16,18 @@ pub struct Program {
     program: Option<String>,
 }
 
-fn main() {
-    // let mut program = PROGRAM.to_owned();
-
-    let args = Program::parse();
-    // Either open the file or use the program string.
-    let mut program = match args.program {
-        Some(ref program) => program.clone(),
-        None => {
-            match args.program_name {
-                Some(ref program_name) => {
-                    std::fs::read_to_string(program_name).unwrap()
-                },
-                None => {
-                    panic!("No program provided");
-                }
-            }
-        }
-    };
-
-    let e = Expr::parse(&mut program).unwrap();
+fn make_env() -> Env {
 
     let mut env = Env::new();
+    env.bind_builtin("env", |env, args| {
+        // Get the env as a map
+        if args.is_empty() {
+            return Expr::Map(env.get_bindings());
+        }
+        let a = env.eval(args[0].clone());
+        env.get(&a).cloned().unwrap_or(Expr::None)
+    });
+
     env.bind_builtin("+", |env, exprs| {
         let mut sum = Expr::default();
         for e in exprs {
@@ -67,7 +50,7 @@ fn main() {
                     list.push(b);
                     sum = Expr::List(list);
                 },
-                (a, b) => panic!("Invalid expr {:?} + {:?}", a, b)
+                (a, b) => return Expr::error(format!("Invalid expr {} + {}", a, b))
             }
         }
         sum
@@ -84,7 +67,7 @@ fn main() {
                     (Expr::Float(a), Expr::Float(b)) => diff = Expr::Float(a - b),
                     (Expr::Int(a), Expr::Float(b)) => diff = Expr::Float(a as f64 - b),
                     (Expr::Float(a), Expr::Int(b)) => diff = Expr::Float(a - b as f64),
-                    (a, b) => panic!("Invalid expr {:?} - {:?}", a, b)
+                    (a, b) => return Expr::error(format!("Invalid expr {} - {}", a, b))
                 }
             }
             diff
@@ -108,7 +91,7 @@ fn main() {
                     }
                     product = Expr::List(list);
                 },
-                (a, b) => panic!("Invalid expr {:?} * {:?}", a, b)
+                (a, b) => return Expr::error(format!("Invalid expr {} * {}", a, b))
             }
         }
         product
@@ -124,7 +107,7 @@ fn main() {
                 (Expr::Float(a), Expr::Float(b)) => quotient = Expr::Float(a / b),
                 (Expr::Int(a), Expr::Float(b)) => quotient = Expr::Float(a as f64 / b),
                 (Expr::Float(a), Expr::Int(b)) => quotient = Expr::Float(a / b as f64),
-                (a, b) => panic!("Invalid expr {:?} / {:?}", a, b)
+                (a, b) => return Expr::error(format!("Invalid expr {} / {}", a, b))
             }
         }
         quotient
@@ -140,7 +123,7 @@ fn main() {
                 (Expr::Float(a), Expr::Float(b)) => quotient = Expr::Float(a % b),
                 (Expr::Int(a), Expr::Float(b)) => quotient = Expr::Float(a as f64 % b),
                 (Expr::Float(a), Expr::Int(b)) => quotient = Expr::Float(a % b as f64),
-                (a, b) => panic!("Invalid expr {:?} % {:?}", a, b)
+                (a, b) => return Expr::error(format!("Invalid expr {} % {}", a, b))
             }
         }
         quotient
@@ -218,7 +201,7 @@ fn main() {
             env.bind(name, f);
             Expr::None
         } else {
-            panic!("Invalid params {:?}", params);
+            return Expr::error(format!("Invalid params {:?}", params));
         }
     });
 
@@ -249,7 +232,7 @@ fn main() {
         match e {
             Expr::Int(i) => Expr::Float((i as f64).sqrt()),
             Expr::Float(f) => Expr::Float(f.sqrt()),
-            e => panic!("Invalid expr {:?}", e)
+            e => Expr::error(format!("Invalid expr sqrt {}", e))
         }
     });
 
@@ -261,7 +244,7 @@ fn main() {
             (Expr::Float(a), Expr::Float(b)) => Expr::Float(a.powf(b)),
             (Expr::Int(a), Expr::Float(b)) => Expr::Float((a as f64).powf(b)),
             (Expr::Float(a), Expr::Int(b)) => Expr::Float(a.powf(b as f64)),
-            (a, b) => panic!("Invalid expr {:?} ^ {:?}", a, b)
+            (a, b) => Expr::error(format!("Invalid expr {} ^ {}", a, b))
         }
     });
 
@@ -271,7 +254,7 @@ fn main() {
         if let Expr::List(params) = params {
             Expr::Function(Some(Box::new(env.clone())), params, Box::new(body))
         } else {
-            panic!("Invalid params {:?}", params);
+            return Expr::error(format!("Invalid params {:?}", params));
         }
     };
     env.bind_builtin("lambda", lambda);
@@ -299,10 +282,10 @@ fn main() {
                 Expr::Builtin(f) => {
                     f.apply(&mut env.clone(), &args)
                 },
-                f => panic!("Invalid function {:?}", f)
+                f => Expr::error(format!("Invalid function {f} apply {}", Expr::from(args)))
             }
         } else {
-            panic!("Invalid args {:?}", args);
+            Expr::error(format!("Invalid function {f} apply {}", Expr::from(args)))
         }
     });
 
@@ -325,7 +308,7 @@ fn main() {
         if let Expr::List(a) = a {
             a[0].clone()
         } else {
-            panic!("Invalid expr {:?}", a);
+            Expr::error(format!("Invalid head {a}"))
         }
     };
     let tail = |env: &mut Env, expr: &[Expr]| {
@@ -333,7 +316,7 @@ fn main() {
         if let Expr::List(a) = a {
             Expr::List(a[1..].to_vec())
         } else {
-            panic!("Invalid expr {:?}", a);
+            Expr::error(format!("Invalid tail {a}"))
         }
     };
 
@@ -349,7 +332,7 @@ fn main() {
         
         let mut format = match format {
             Expr::String(s) => s,
-            e => panic!("Invalid format {:?}", e)
+            e => return Expr::error(format!("Invalid format {e}"))
         };
         
         // Find all of the format specifiers.
@@ -393,7 +376,7 @@ fn main() {
                 continue;
             }
             if i >= args.len() {
-                return Expr::Err(Box::new(Expr::String("Not enough arguments".to_owned())));
+                return Expr::error("Too few arguments");
             }
             let specifier = format!("{{}}");
             let value = env.eval(args[i].clone());
@@ -410,7 +393,7 @@ fn main() {
         }
 
         if i < args.len() {
-            return Expr::Err(Box::new(Expr::String("Too many arguments".to_owned())));
+            return Expr::error("Too many arguments");
         }
         
         Expr::String(format)
@@ -433,7 +416,7 @@ fn main() {
             if let Expr::List(l) = e {
                 list.extend(l);
             } else {
-                panic!("Invalid append {:?}", e);
+                return Expr::error(format!("Invalid append {e}"));
             }
         }
         Expr::List(list)
@@ -442,6 +425,20 @@ fn main() {
     env.bind_builtin("eval", |env, expr| {
         let e = env.eval(expr[0].clone());
         env.eval(e)
+    });
+
+    env.bind_builtin("exit", |env, expr| {
+        match env.eval(expr[0].clone()) {
+            Expr::Int(i) => std::process::exit(i as i32),
+            Expr::String(s) => {
+                eprintln!("{s}");
+                std::process::exit(1);
+            }
+            e => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
     });
 
     env.bind_builtin("quote", |_env, expr| {
@@ -472,7 +469,8 @@ fn main() {
         let e = env.eval(expr[0].clone());
         match e {
             Expr::Bool(b) => Expr::Bool(!b),
-            e => panic!("Invalid expr {:?}", e)
+            e => return Expr::error(format!("Invalid not {e}"))
+
         }
     });
 
@@ -483,7 +481,7 @@ fn main() {
             Expr::List(l) => Expr::Int(l.len() as i64),
             Expr::Map(m) => Expr::Int(m.len() as i64),
             Expr::Tree(t) => Expr::Int(t.len() as i64),
-            e => panic!("Invalid expr {:?}", e)
+            e => Expr::error(format!("Invalid len {e}"))
         }
     });
 
@@ -491,18 +489,29 @@ fn main() {
         let mut new_env = env.clone();
         let bindings = expr[0].clone();
         let body = expr[1].clone();
-        if let Expr::List(bindings) = bindings {
-            for binding in bindings {
-                if let Expr::List(binding) = binding {
-                    let name = binding[0].clone();
-                    let value = env.eval(binding[1].clone());
-                    new_env.bind(name, value);
-                } else {
-                    panic!("Invalid binding {:?}", binding);
+        match bindings {
+            Expr::List(bindings) => {
+                for binding in bindings {
+                    if let Expr::List(binding) = binding {
+                        let name = binding[0].clone();
+                        let value = env.eval(binding[1].clone());
+                        new_env.bind(name, value);
+                    } else {
+                        return Expr::error(format!("Invalid binding {binding}"));
+                    }
                 }
             }
-        } else {
-            panic!("Invalid bindings {:?}", bindings);
+            Expr::Map(bindings) => {
+                for (name, value) in bindings {
+                    new_env.bind(name, value);
+                }
+            }
+            Expr::Tree(bindings) => {
+                for (name, value) in bindings {
+                    new_env.bind(name, value);
+                }
+            }
+            bindings => return Expr::error(format!("Invalid bindings {bindings}"))
         }
         new_env.eval(body)
     });
@@ -516,7 +525,7 @@ fn main() {
             (Expr::List(a), Expr::Int(b)) => a.get(b as usize).cloned().unwrap_or(Expr::None),
             (Expr::Map(a), b) => a.get(&b).cloned().unwrap_or(Expr::None),
             (Expr::Tree(a), b) => a.get(&b).cloned().unwrap_or(Expr::None),
-            (a, b) => panic!("Invalid expr {:?} get {:?}", a, b)
+            (a, b) => return Expr::error(format!("Invalid expr get {} {}", a, b))
         }
     });
 
@@ -549,7 +558,72 @@ fn main() {
                 a.insert(b, c);
                 Expr::Tree(a)
             },
-            (a, b) => panic!("Invalid expr {:?} set {:?} {:?}", a, b, c)
+            (a, b) => return Expr::error(format!("Invalid expr set {} {} {}", a, b, c))
+        }
+    });
+
+    env.bind_builtin("zip", |env, expr| {
+        let a = env.eval(expr[0].clone());
+        let b = env.eval(expr[1].clone());
+
+        match (a, b) {
+            (Expr::List(a), Expr::List(b)) => {
+                let mut list = vec![];
+                for (a, b) in a.into_iter().zip(b.into_iter()) {
+                    list.push(Expr::List(vec![a, b]));
+                }
+                Expr::List(list)
+            },
+            (a, b) => return Expr::error(format!("Invalid expr zip {} {}", a, b))
+        }
+    });
+
+    // Convert a list of pairs into a map.
+    env.bind_builtin("to-map", |env, expr| {
+        let a = env.eval(expr[0].clone());
+        match a {
+            Expr::List(a) => {
+                let mut map = std::collections::HashMap::new();
+                for e in a {
+                    if let Expr::List(e) = e {
+                        if e.len() == 2 {
+                            map.insert(e[0].clone(), e[1].clone());
+                        } else {
+                            return Expr::error(format!("Invalid pair {}", Expr::from(e)));
+                        }
+                    } else {
+                        return Expr::error(format!("Invalid pair {}", Expr::from(e)));
+                    }
+                }
+                Expr::Map(map)
+            },
+            Expr::Map(a) => return Expr::Map(a),
+            Expr::Tree(a) => return Expr::Map(a.into_iter().collect()),
+            a => return Expr::error(format!("Invalid expr to-map {}", Expr::from(a)))
+        }
+    });
+
+    // Convert a list of pairs into a tree.
+    env.bind_builtin("to-tree", |env, expr| {
+        let a = env.eval(expr[0].clone());
+        match a {
+            Expr::List(a) => {
+                let mut tree = std::collections::BTreeMap::new();
+                for e in a {
+                    if let Expr::List(e) = e {
+                        if e.len() == 2 {
+                            tree.insert(e[0].clone(), e[1].clone());
+                        } else {
+                            return Expr::error(format!("Invalid pair {}", Expr::from(e)));
+                        }
+                    } else {
+                        return Expr::error(format!("Invalid pair {}", Expr::from(e)));
+                    }
+                }
+                Expr::Tree(tree)
+            },
+            Expr::Map(a) => return Expr::Tree(a.into_iter().collect()),
+            a => return Expr::error(format!("Invalid expr to-tree {}", Expr::from(a)))
         }
     });
 
@@ -568,11 +642,11 @@ fn main() {
                 let mut map = std::collections::HashMap::new();
                 for (k, v) in a {
                     // map.insert(k.clone(), env.eval(Expr::List(vec![f.clone(), k, v])));
-                    let pair = env.eval(Expr::List(vec![f.clone(), Expr::Quote(Box::new(k)), v]));
+                    let pair = env.eval(Expr::List(vec![f.clone(), k.quote(), v.quote()]));
                     if let Expr::List(pair) = pair {
                         map.insert(pair[0].clone(), pair[1].clone());
                     } else {
-                        panic!("Invalid pair {:?}", pair);
+                        return Expr::error(format!("Invalid pair {}", pair));
                     }
                 }
                 Expr::Map(map)
@@ -581,16 +655,16 @@ fn main() {
                 let mut tree = std::collections::BTreeMap::new();
                 for (k, v) in a {
                     // tree.insert(k.clone(), env.eval(Expr::List(vec![f.clone(), k, v])));
-                    let pair = env.eval(Expr::List(vec![f.clone(), Expr::Quote(Box::new(k)), v]));
+                    let pair = env.eval(Expr::List(vec![f.clone(), k.quote(), v.quote()]));
                     if let Expr::List(pair) = pair {
                         tree.insert(pair[0].clone(), pair[1].clone());
                     } else {
-                        panic!("Invalid pair {:?}", pair);
+                        return Expr::error(format!("Invalid pair {}", pair));
                     }
                 }
                 Expr::Tree(tree)
             },
-            a => panic!("Invalid expr {:?}", a)
+            a => return Expr::error(format!("Invalid expr map {}", a))
         }
     });
 
@@ -611,7 +685,7 @@ fn main() {
             Expr::Map(a) => {
                 let mut map = std::collections::HashMap::new();
                 for (k, v) in a {
-                    let x = env.eval(Expr::List(vec![f.clone(), Expr::Quote(Box::new(k.clone())), v.clone()]));
+                    let x = env.eval(Expr::List(vec![f.clone(), k.quote(), v.quote()]));
                     if x == Expr::Bool(true) {
                         map.insert(k, v);
                     }
@@ -621,14 +695,14 @@ fn main() {
             Expr::Tree(a) => {
                 let mut tree = std::collections::BTreeMap::new();
                 for (k, v) in a {
-                    let x = env.eval(Expr::List(vec![f.clone(), Expr::Quote(Box::new(k.clone())), v.clone()]));
+                    let x = env.eval(Expr::List(vec![f.clone(), k.quote(), v.quote()]));
                     if x == Expr::Bool(true) {
                         tree.insert(k, v);
                     }
                 }
                 Expr::Tree(tree)
             },
-            a => panic!("Invalid expr {:?}", a)
+            a => return Expr::error(format!("Invalid expr filter {}", a))
         }
     });
 
@@ -659,7 +733,7 @@ fn main() {
                 }
                 acc
             },
-            a => panic!("Invalid expr {:?}", a)
+            a => return Expr::error(format!("Invalid expr reduce {}", a))
         }
     });
 
@@ -669,36 +743,147 @@ fn main() {
         match (a, b) {
             (Expr::Int(a), Expr::Int(b)) => {
                 let mut list = vec![];
-                for i in a..b {
+                for i in a..=b {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
             },
             (Expr::Int(a), Expr::Float(b)) => {
                 let mut list = vec![];
-                for i in a..(b as i64) {
+                for i in a..=(b as i64) {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
             },
             (Expr::Float(a), Expr::Int(b)) => {
                 let mut list = vec![];
-                for i in (a as i64)..b {
+                for i in (a as i64)..=b {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
             },
             (Expr::Float(a), Expr::Float(b)) => {
                 let mut list = vec![];
-                for i in (a as i64)..(b as i64) {
+                for i in (a as i64)..=(b as i64) {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
             },
-            (a, b) => panic!("Invalid expr {:?} range {:?}", a, b)
+            (Expr::Symbol(a), Expr::Symbol(b)) if a.name().len() == 1 && b.name().len() == 1 => {
+                let mut list = vec![];
+                let first = a.name().chars().next().unwrap();
+                let last = b.name().chars().next().unwrap();
+                for i in first..=last {
+                    list.push(Expr::Symbol(Symbol::new(&i.to_string())));
+                }
+                Expr::List(list)
+            },
+            (Expr::String(a), Expr::String(b)) if a.len() == 1 && b.len() == 1 => {
+                let mut list = vec![];
+                let first = a.chars().next().unwrap();
+                let last = b.chars().next().unwrap();
+                for i in first..=last {
+                    list.push(Expr::String(i.to_string()));
+                }
+                Expr::List(list)
+            },
+            (a, b) => return Expr::error(format!("Invalid expr range {} {}", a, b))
         }
     });
     
+    env
+}
+
+fn main() {
+    // let mut program = PROGRAM.to_owned();
+
+    let mut env = make_env();
+    let args = Program::parse();
+    // Either open the file or use the program string.
+    let mut program = match args.program {
+        Some(ref program) => program.clone(),
+        None => {
+            match args.program_name {
+                Some(ref program_name) => {
+                    std::fs::read_to_string(program_name).unwrap()
+                },
+                None => {
+                    // Do a repl
+                    let mut rl = DefaultEditor::new().expect("Failed to create editor");
+                    #[cfg(feature = "with-file-history")]
+                    if rl.load_history("history.txt").is_err() {
+                        println!("No previous history.");
+                    }
+                    let mut program = String::new();
+                    loop {
+                        
+                        let readline = rl.readline(if program.is_empty() {
+                            ">>> "
+                        } else {
+                            "... "
+                        });
+                        match readline {
+                            Ok(line) => {
+                                if let Err(e) = rl.add_history_entry(line.as_str()) {
+                                    eprintln!("Error: {:?}", e);
+                                }
+                                program.push_str(&line);
+                                match Expr::parse(&program) {
+                                    Ok(e) => {
+                                        let result = env.eval(e);
+                                        if result != Expr::None {
+                                            println!("{}", result);
+                                        }
+                                        env.bind(Expr::symbol("ans"), result);
+
+                                        program = String::new();
+                                    },
+                                    Err(e) => {
+                                        // Try wrapping the input in parens and parsing it first
+                                        if let Ok(e) = Expr::parse(&format!("({})", program)) {
+
+                                            let result = env.eval(e);
+                                            if result != Expr::None {
+                                                println!("{}", result);
+                                            }
+                                            env.bind(Expr::symbol("ans"), result);
+
+                                            program = String::new();
+                                            continue;
+                                        }
+
+                                        if line.is_empty() {
+                                            eprintln!("Error in\n`{program}`\n -> {}", e);
+                                            program = String::new();
+                                        } else {
+                                            program.push_str("\n");
+                                        }
+                                    }
+                                }
+                                // env.eval(Expr::parse(line))
+                            },
+                            Err(ReadlineError::Interrupted) => {
+                                println!("CTRL-C");
+                                break
+                            },
+                            Err(ReadlineError::Eof) => {
+                                println!("CTRL-D");
+                                break
+                            },
+                            Err(err) => {
+                                println!("Error: {:?}", err);
+                                break
+                            }
+                        }
+                    }
+                    std::process::exit(0);
+                }
+            }
+        }
+    };
+
+    let e = Expr::parse(&mut program).unwrap();
+
     let result = env.eval(e);
     if args.program.is_some() && result != Expr::None {
         println!("{}", result);

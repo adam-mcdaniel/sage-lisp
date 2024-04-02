@@ -11,11 +11,13 @@ required-features = ["build-binary"]
 
 # Add a dependency for the binary
 [features]
-build-binary = ["clap"]
+build-binary = ["clap", "rustyline"]
 clap = ["dep:clap"]
+rustyline = ["dep:rustyline"]
 
 [dependencies]
 tracing = "0.1"
 lazy_static = "1.4"
 clap = { version = "^4.5.4", optional = true, features = ["derive"] }
 clap_derive = { version = "^4.5.4", optional = true }
+rustyline = { version = "^14.0.0", optional = true }

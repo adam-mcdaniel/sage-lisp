@@ -95,6 +95,10 @@ impl Env {
         }
     }
 
+    pub fn get_bindings(&self) -> HashMap<Expr, Expr> {
+        self.bindings.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+
     /// Bind a symbol to a value
     pub fn bind(&mut self, symbol: Expr, value: Expr) {
         if self.get(&symbol) == Some(&value) {
@@ -236,7 +240,7 @@ impl Display for Builtin {
 }
 
 fn is_valid_symbol_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' || c == '*' || c == '/' || c == '\\' || c == '%' || c == '!' || c == '?' || c == '=' || c == '<' || c == '>' || c == '^'
+    c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' || c == '*' || c == '.' || c == '/' || c == '\\' || c == '%' || c == '!' || c == '?' || c == '=' || c == '<' || c == '>' || c == '^'
 }
 
 /// A lisp expression to be evaluated
@@ -274,14 +278,56 @@ pub enum Expr {
     Builtin(Builtin),
 }
 
+impl From<String> for Expr {
+    fn from(s: String) -> Self {
+        Self::String(s)
+    }
+}
+
+impl From<&str> for Expr {
+    fn from(s: &str) -> Self {
+        Self::String(s.to_string())
+    }
+}
+
+impl From<i64> for Expr {
+    fn from(i: i64) -> Self {
+        Self::Int(i)
+    }
+}
+
+impl From<f64> for Expr {
+    fn from(f: f64) -> Self {
+        Self::Float(f)
+    }
+}
+
+impl<T> From<Vec<T>> for Expr where T: Into<Expr> {
+    fn from(v: Vec<T>) -> Self {
+        Self::List(v.into_iter().map(|e| e.into()).collect())
+    }
+}
+
 impl Expr {
+    pub fn symbol(name: impl ToString) -> Self {
+        Self::Symbol(Symbol::new(&name.to_string()))
+    }
+
+    pub fn error(message: impl Into<Self>) -> Self {
+        Self::Err(Box::new(message.into()))
+    }
+
+    pub fn quote(&self) -> Self {
+        Self::Quote(Box::new(self.clone()))
+    }
+
     pub fn parse(input: &str) -> Result<Expr, String> {
         let mut input = Self::remove_comments(input);
         let (input, expr) = Self::parse_helper(&mut input)?;
         if input.is_empty() {
             return Ok(expr);
         } else {
-            return Err("Could not parse input".to_string());
+            return Err(format!("Left over input: {}", input));
         }
     }
 
@@ -313,7 +359,7 @@ impl Expr {
         
         // Try to parse as a number
         // Split by whitespace
-        let mut first_token = input.split_whitespace().next().ok_or("Could not parse input")?.to_owned();
+        let mut first_token = input.split_whitespace().next().ok_or("Could not get first token")?.to_owned();
         first_token = first_token.chars().take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
         
 
@@ -488,8 +534,8 @@ impl Expr {
 
         // Try to parse as a symbol
         let mut symbol = String::new();
-        while is_valid_symbol_char(input.chars().next().ok_or("Could not parse input")?) {
-            symbol.push(input.chars().next().ok_or("Could not parse input")?);
+        while input.chars().next().is_some() && is_valid_symbol_char(input.chars().next().unwrap()) {
+            symbol.push(input.chars().next().ok_or("Could not get symbol characters")?);
             input = &mut input[1..];
         }
         // println!("Symbol: {}", symbol);
@@ -497,7 +543,7 @@ impl Expr {
             return Ok((input, Expr::Symbol(Symbol::new(&symbol))));
         }
 
-        Err("Could not parse input".to_string())
+        Err("All possible expressions mismatched".to_string())
     }
 }
 
