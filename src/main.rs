@@ -833,8 +833,8 @@ fn main() {
                                         let result = env.eval(e);
                                         if result != Expr::None {
                                             println!("{}", result);
+                                            env.bind(Expr::symbol("ans"), result);
                                         }
-                                        env.bind(Expr::symbol("ans"), result);
 
                                         program = String::new();
                                     },
