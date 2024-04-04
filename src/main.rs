@@ -182,12 +182,21 @@ fn make_env() -> Env {
         }
     });
 
-    env.bind_builtin("define", 
+    env.bind_builtin("def", 
         |env, exprs| {
             let name = exprs[0].clone();
             let value = env.eval(exprs[1].clone());
             env
                 .bind(name, value);
+            Expr::None
+        }
+    );
+
+    env.bind_builtin("undef", 
+        |env, exprs| {
+            let name = exprs[0].clone();
+            env
+                .unbind(&name);
             Expr::None
         }
     );
@@ -219,13 +228,13 @@ fn make_env() -> Env {
         Expr::None
     });
 
-    env.bind_builtin("do", |env, exprs| {
-        let mut result = Expr::default();
-        for e in exprs {
-            result = env.eval(e.clone());
-        }
-        result
-    });
+    // env.bind_builtin("do", |env, exprs| {
+    //     let mut result = Expr::default();
+    //     for e in exprs {
+    //         result = env.eval(e.clone());
+    //     }
+    //     result
+    // });
 
     env.bind_builtin("sqrt", |env, expr| {
         let e = env.eval(expr[0].clone());
@@ -503,12 +512,12 @@ fn make_env() -> Env {
             }
             Expr::Map(bindings) => {
                 for (name, value) in bindings {
-                    new_env.bind(name, value);
+                    new_env.bind(name, env.eval(value));
                 }
             }
             Expr::Tree(bindings) => {
                 for (name, value) in bindings {
-                    new_env.bind(name, value);
+                    new_env.bind(name, env.eval(value));
                 }
             }
             bindings => return Expr::error(format!("Invalid bindings {bindings}"))
@@ -623,7 +632,30 @@ fn make_env() -> Env {
                 Expr::Tree(tree)
             },
             Expr::Map(a) => return Expr::Tree(a.into_iter().collect()),
+            Expr::Tree(a) => return Expr::Tree(a),
             a => return Expr::error(format!("Invalid expr to-tree {}", Expr::from(a)))
+        }
+    });
+
+    env.bind_builtin("to-list", |env, expr| {
+        let a = env.eval(expr[0].clone());
+        match a {
+            Expr::Map(a) => {
+                let mut list = vec![];
+                for (k, v) in a {
+                    list.push(Expr::List(vec![k, v]));
+                }
+                Expr::List(list)
+            },
+            Expr::Tree(a) => {
+                let mut list = vec![];
+                for (k, v) in a {
+                    list.push(Expr::List(vec![k, v]));
+                }
+                Expr::List(list)
+            },
+            Expr::List(a) => return Expr::List(a),
+            a => return Expr::error(format!("Invalid expr to-list {}", a))
         }
     });
 
@@ -881,11 +913,10 @@ fn main() {
             }
         }
     };
-
     let e = Expr::parse(&mut program).unwrap();
 
     let result = env.eval(e);
-    if args.program.is_some() && result != Expr::None {
+    if result != Expr::None {
         println!("{}", result);
     }
 }
