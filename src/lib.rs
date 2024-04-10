@@ -89,6 +89,10 @@ impl Env {
         self.bind_symbol(symbol, Expr::Builtin(Builtin::new(f, symbol)));
     }
 
+    pub fn bind_lazy_builtin(&mut self, symbol: &'static str, f: fn(&mut Env, &[Expr]) -> Expr) {
+        self.bind_symbol(symbol, Expr::Builtin(Builtin::new(f, symbol).with_lazy_eval(true)));
+    }
+
     pub fn merge(&mut self, other: &Env) {
         for (k, v) in other.bindings.iter() {
             self.bind(k.clone(), v.clone());
@@ -163,7 +167,9 @@ impl Env {
                         },
                         Builtin(f) => {
                             expr = (f.f)(self, &args);
-                            break;
+                            if !f.lazy_eval {
+                                break;
+                            }
                             // saved_bindings = self.bindings.clone();
                         },
                         Tree(t) => {
@@ -254,6 +260,7 @@ impl Env {
 pub struct Builtin {
     pub f: fn(&mut Env, &[Expr]) -> Expr,
     pub name: &'static str,
+    pub(crate) lazy_eval: bool
 }
 
 impl Builtin {
@@ -261,6 +268,14 @@ impl Builtin {
         Self {
             f,
             name,
+            lazy_eval: true,
+        }
+    }
+
+    pub fn with_lazy_eval(self, lazy_eval: bool) -> Self {
+        Self {
+            lazy_eval,
+            ..self
         }
     }
 
@@ -719,14 +734,14 @@ impl Display for Expr {
             Quote(e) => write!(f, "'{}", e),
             Err(e) => write!(f, "<error: {}>", e),
             Many(d) => {
-                write!(f, "(do ")?;
+                write!(f, "{{ ")?;
                 for (i, e) in d.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
                     write!(f, "{}", e)?;
                 }
-                write!(f, ")")
+                write!(f, " }}")
             },
             List(e) => {
                 write!(f, "(")?;

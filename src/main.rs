@@ -171,14 +171,22 @@ fn make_env() -> Env {
         Expr::Bool(a > b)
     });
 
-    env.bind_builtin("if", |env, exprs| {
+    env.bind_lazy_builtin("if", |env, exprs| {
         let cond = env.eval(exprs[0].clone());
         let then = exprs[1].clone();
-        let else_ = exprs[2].clone();
-        if cond == Expr::Bool(true) {
-            env.eval(then)
+        if exprs.len() < 3 {
+            if cond == Expr::Bool(true) {
+                then
+            } else {
+                Expr::None
+            }
         } else {
-            env.eval(else_)
+            let else_ = exprs[2].clone();
+            if cond == Expr::Bool(true) {
+                then
+            } else {
+                else_
+            }
         }
     });
 
