@@ -33,7 +33,7 @@ fn make_env() -> Env {
         for e in exprs {
             let e = env.eval(e.clone());
             // sum += env.eval(e);
-            match (sum, env.eval(e)) {
+            match (sum, e) {
                 (Expr::None, b) => sum = b,
                 (Expr::Int(a), Expr::Int(b)) => sum = Expr::Int(a + b),
                 (Expr::Float(a), Expr::Float(b)) => sum = Expr::Float(a + b),
@@ -834,6 +834,42 @@ fn make_env() -> Env {
                 Expr::List(list)
             },
             (a, b) => return Expr::error(format!("Invalid expr range {} {}", a, b))
+        }
+    });
+
+    env.bind_builtin("rev", |env, expr| {
+        let a = env.eval(expr[0].clone());
+        match a {
+            Expr::List(mut a) => {
+                a.reverse();
+                Expr::List(a)
+            },
+            a => return Expr::error(format!("Invalid expr rev {}", a))
+        }
+    });
+
+    env.bind_builtin("rand", |env, expr| {
+        use rand::Rng;
+        let low = env.eval(expr[0].clone());
+        let high = env.eval(expr[1].clone());
+        match (low, high) {
+            (Expr::Int(low), Expr::Int(high)) => {
+                let mut rng = rand::thread_rng();
+                Expr::Int(rng.gen_range(low..=high))
+            },
+            (Expr::Float(low), Expr::Float(high)) => {
+                let mut rng = rand::thread_rng();
+                Expr::Float(rng.gen_range(low..=high))
+            },
+            (Expr::Int(low), Expr::Float(high)) => {
+                let mut rng = rand::thread_rng();
+                Expr::Float(rng.gen_range(low as f64..=high))
+            },
+            (Expr::Float(low), Expr::Int(high)) => {
+                let mut rng = rand::thread_rng();
+                Expr::Float(rng.gen_range(low..=high as f64))
+            },
+            (a, b) => return Expr::error(format!("Invalid expr rand {} {}", a, b))
         }
     });
     

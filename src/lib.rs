@@ -289,7 +289,7 @@ impl Builtin {
         Self {
             f,
             name,
-            lazy_eval: true,
+            lazy_eval: false,
         }
     }
 

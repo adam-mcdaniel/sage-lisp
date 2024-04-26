@@ -16,7 +16,19 @@ This crate implements a standalone Lisp implementation, intended for use in the 
 
     (print-fact 5)
     
-    (println "Stirling's approx. for 5! = " (stirlings 5)))
+    (println "Stirling's approx. for 5! = " (stirlings 5))
+    
+    (defun quicksort (lst)
+        (if (<= (len lst) 1) lst {
+            (def pivot (get lst (/ (len lst) 2)))
+            (def less (filter (\(x) (< x pivot)) lst))
+            (def equal (filter (\(x) (= x pivot)) lst))
+            (def greater (filter (\(x) (> x pivot)) lst))
+            (+ (quicksort less) equal (quicksort greater))}))
+            
+    (def test-list (list 5 3 7 2 8 1 9 4 6))
+    (println "Unsorted list: " test-list)
+    (println "Sorted list: " (quicksort test-list)))
 ```
 
 ## Usage
