@@ -45,6 +45,18 @@ impl Symbol {
     }
 }
 
+impl From<&str> for Symbol {
+    fn from(s: &str) -> Self {
+        Symbol::new(s)
+    }
+}
+
+impl From<String> for Symbol {
+    fn from(s: String) -> Self {
+        Symbol::new(&s)
+    }
+}
+
 impl PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
         if Arc::ptr_eq(&self.0, &other.0) {
@@ -96,6 +108,15 @@ impl Env {
     pub fn merge(&mut self, other: &Env) {
         for (k, v) in other.bindings.iter() {
             self.bind(k.clone(), v.clone());
+        }
+    }
+
+    /// Duplicate a binding for one variable to another
+    pub fn alias(&mut self, from: impl Into<Symbol>, to: impl Into<Symbol>) {
+        let from = from.into();
+        let to = to.into();
+        if let Some(value) = self.get(&Expr::Symbol(from)) {
+            self.bind(Expr::Symbol(to), value.clone());
         }
     }
 

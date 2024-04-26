@@ -244,6 +244,10 @@ fn make_env() -> Env {
     //     result
     // });
 
+    env.bind_lazy_builtin("do", |_env, exprs| {
+        Expr::Many(Vec::from(exprs))
+    });
+
     env.bind_builtin("sqrt", |env, expr| {
         let e = env.eval(expr[0].clone());
         match e {
@@ -264,6 +268,8 @@ fn make_env() -> Env {
             (a, b) => Expr::error(format!("Invalid expr {} ^ {}", a, b))
         }
     });
+
+    env.alias("^", "pow");
 
     let lambda = |env: &mut Env, expr: &[Expr]| {
         let params = expr[0].clone();
