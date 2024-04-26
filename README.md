@@ -48,7 +48,7 @@ $ ./sagel example.lisp
 Or provide a program as a command line argument.
 
 ```bash
-$ ./sagel -c "(do (println hi!) (+ 1 2 3))
+$ ./sagel -c "(do (println hi!) (+ 1 2 3))"
 hi!
 6
 ```
