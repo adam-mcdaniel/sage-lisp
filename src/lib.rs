@@ -398,7 +398,8 @@ impl Expr {
 
     pub fn parse(input: &str) -> Result<Expr, String> {
         let mut input = Self::remove_comments(input);
-        let (input, expr) = Self::parse_helper(&mut input)?;
+        let (mut input, expr) = Self::parse_helper(&mut input)?;
+        input = Self::remove_whitespace(input);
         if input.is_empty() {
             return Ok(expr);
         } else {
@@ -410,6 +411,31 @@ impl Expr {
         let mut input = input;
         let mut output = String::new();
         while !input.is_empty() {
+            // Ignore comments in quoted strings
+
+            if input.starts_with('"') {
+                let mut last_was_escape = false;
+                let mut len = 0;
+                for c in input[1..].chars() {
+                    len += 1;
+                    if c == '\\' && !last_was_escape {
+                        last_was_escape = true;
+                        continue;
+                    }
+                    if last_was_escape {
+                        last_was_escape = false;
+                        continue;
+                    }
+
+                    if c == '"' {
+                       break
+                    }
+                }
+
+                output.push_str(&input[..len + 1]);
+                input = &input[len + 1..];
+            }
+
             if input.starts_with(';') {
                 let end = input.find('\n').unwrap_or(input.len());
                 input = &input[end..];
@@ -422,10 +448,15 @@ impl Expr {
         output
     }
 
-    fn parse_helper(mut input: &mut str) -> Result<(&mut str, Expr), String> {
+    fn remove_whitespace(mut input: &mut str) -> &mut str {
         while input.starts_with(' ') || input.starts_with('\n') || input.starts_with('\t') {
             input = &mut input[1..];
         }
+        input
+    }
+
+    fn parse_helper(mut input: &mut str) -> Result<(&mut str, Expr), String> {
+        input = Self::remove_whitespace(input);
 
         // If the input is empty, return None
         if input.is_empty() {
@@ -470,8 +501,25 @@ impl Expr {
 
         // Try to parse as a string
         if input.starts_with('"') {
-            // Find the end of the string
-            let end = input[1..].find('"').ok_or("Could not parse input")?;
+            // Find the end of the string (the next quote character)
+            let mut end = 1;
+            let mut last_was_escape = false;
+            for (i, c) in input[1..].char_indices() {
+                if c == '\\' && !last_was_escape {
+                    last_was_escape = true;
+                    continue;
+                }
+                if last_was_escape {
+                    last_was_escape = false;
+                    continue;
+                }
+
+                if c == '"' {
+                    end = i;
+                    break;
+                }
+            }
+
             let string = input[1..end + 1].to_string();
             // Move the input past the string
             let input = &mut input[end + 2..];
