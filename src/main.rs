@@ -1,5 +1,5 @@
 
-use lisp::*;
+use sage_lisp::*;
 use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;

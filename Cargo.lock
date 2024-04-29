@@ -201,18 +201,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01cda141df6706de531b6c46c3a33ecca755538219bd484262fa09410c13539c"
 
 [[package]]
-name = "lisp"
-version = "0.1.0"
-dependencies = [
- "clap",
- "clap_derive",
- "lazy_static",
- "rand",
- "rustyline",
- "tracing",
-]
-
-[[package]]
 name = "log"
 version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -354,6 +342,18 @@ dependencies = [
  "unicode-width",
  "utf8parse",
  "windows-sys",
+]
+
+[[package]]
+name = "sage-lisp"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "clap_derive",
+ "lazy_static",
+ "rand",
+ "rustyline",
+ "tracing",
 ]
 
 [[package]]
