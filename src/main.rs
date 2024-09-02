@@ -3,7 +3,10 @@ use sage_lisp::*;
 use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+// use sage::{frontend, lir::Compile, parse::*, targets::CompiledTarget, vm::*};
+use std::io::BufRead;
 
+const CALL_STACK_SIZE: usize = 8192;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -17,7 +20,6 @@ pub struct Program {
 }
 
 fn make_env() -> Env {
-
     let mut env = Env::new();
     env.bind_builtin("env", |env, args| {
         // Get the env as a map
@@ -55,6 +57,7 @@ fn make_env() -> Env {
         }
         sum
     });
+    env.alias("+", "add");
 
     env.bind_builtin("-", 
         |env, exprs| {
@@ -73,6 +76,7 @@ fn make_env() -> Env {
             diff
         }
     );
+    env.alias("-", "sub");
 
     env.bind_builtin("*", |env, exprs| {
         let mut product = Expr::default();
@@ -96,6 +100,7 @@ fn make_env() -> Env {
         }
         product
     });
+    env.alias("*", "mul");
 
     env.bind_builtin("/", |env, exprs| {
         let mut quotient = Expr::default();
@@ -112,6 +117,7 @@ fn make_env() -> Env {
         }
         quotient
     });
+    env.alias("/", "div");
 
     env.bind_builtin("%", |env, exprs| {
         let mut quotient = Expr::default();
@@ -128,6 +134,7 @@ fn make_env() -> Env {
         }
         quotient
     });
+    env.alias("%", "rem");
     
     env.bind_builtin("=", |env, exprs| {
         let a = env.eval(exprs[0].clone());
@@ -135,6 +142,7 @@ fn make_env() -> Env {
         
         Expr::Bool(a == b)
     });
+    env.alias("=", "==");
 
     env.bind_builtin("!=", |env, exprs| {
         let a = env.eval(exprs[0].clone());
@@ -190,7 +198,7 @@ fn make_env() -> Env {
         }
     });
 
-    env.bind_builtin("def", 
+    env.bind_builtin("define", 
         |env, exprs| {
             let name = exprs[0].clone();
             let value = env.eval(exprs[1].clone());
@@ -200,7 +208,7 @@ fn make_env() -> Env {
         }
     );
 
-    env.bind_builtin("undef", 
+    env.bind_builtin("undefine", 
         |env, exprs| {
             let name = exprs[0].clone();
             env
@@ -546,11 +554,18 @@ fn make_env() -> Env {
         match (a, b) {
             (Expr::String(a), Expr::Int(b)) => Expr::String(a.chars().nth(b as usize).unwrap_or('\0').to_string()),
             (Expr::List(a), Expr::Int(b)) => a.get(b as usize).cloned().unwrap_or(Expr::None),
+            (Expr::Map(a), Expr::Symbol(b)) => {
+                // a.get(&b).cloned().unwrap_or(Expr::None)
+                a.get(&Expr::Symbol(b.clone())).cloned()
+                    .unwrap_or_else(|| a.get(&Expr::String(b.name().to_owned()))
+                    .cloned().unwrap_or(Expr::None))
+            },
             (Expr::Map(a), b) => a.get(&b).cloned().unwrap_or(Expr::None),
             (Expr::Tree(a), b) => a.get(&b).cloned().unwrap_or(Expr::None),
             (a, b) => return Expr::error(format!("Invalid expr get {} {}", a, b))
         }
     });
+    env.alias("get", "@");
 
     env.bind_builtin("set", |env, expr| {
         let a = env.eval(expr[0].clone());
@@ -873,11 +888,164 @@ fn make_env() -> Env {
         }
     });
     
+    // env.bind_builtin("parse", |env, expr| {
+    //     let a = env.eval(expr[0].clone());
+    //     match a {
+    //         Expr::String(frontend_src) => {
+    //             match parse_frontend_minimal(&frontend_src, Some("stdin")) {
+    //                 Ok(frontend_code) => {
+    //                     Expr::serialize(frontend_code)
+    //                 },
+    //                 Err(e) => Expr::error(e)
+    //             }
+    //         },
+    //         a => return Expr::error(format!("Invalid expr parse {}", a))
+    //     }
+    // });
+    // env.bind_builtin("parse-big", |env, expr| {
+    //     let a = env.eval(expr[0].clone());
+    //     match a {
+    //         Expr::String(frontend_src) => {
+    //             match parse_frontend(&frontend_src, Some("stdin")) {
+    //                 Ok(frontend_code) => {
+    //                     Expr::serialize(frontend_code)
+    //                 },
+    //                 Err(e) => Expr::error(e)
+    //             }
+    //         },
+    //         a => return Expr::error(format!("Invalid expr parse {}", a))
+    //     }
+    // });
+
+    // env.bind_builtin("compile", |env, expr| {
+    //     let frontend_code = Expr::deserialize::<sage::lir::Expr>(&env.eval(expr[0].clone())).map_err(|e| Expr::error(format!("Invalid AST: {e}")));
+
+    //     match frontend_code {
+    //         Err(e) => e,
+    //         Ok(frontend_code) => {
+    //             let asm_code = frontend_code.compile().map_err(|e| Expr::error(format!("Invalid AST: {e}")));
+    //             if let Err(e) = asm_code {
+    //                 return e;
+    //             }
+    //             let asm_code = asm_code.unwrap();
+        
+    //             let vm_code = match asm_code {
+    //                 Ok(core_asm_code) => core_asm_code.assemble(CALL_STACK_SIZE).map(Ok),
+    //                 Err(std_asm_code) => std_asm_code.assemble(CALL_STACK_SIZE).map(Err),
+    //             }.unwrap();
+        
+    //             let c_code = match vm_code {
+    //                 Ok(vm_code) => {
+    //                     sage::targets::C.build_core(&vm_code.flatten()).unwrap()
+    //                 }
+    //                 Err(vm_code) => {
+    //                     sage::targets::C.build_std(&vm_code.flatten()).unwrap()
+    //                 }
+    //             };
+        
+    //             Expr::String(c_code)
+    //         }
+    //     }
+    // });
+
+    // env.bind_builtin("asm", |env, expr| {
+    //     let frontend_code = Expr::deserialize::<sage::lir::Expr>(&env.eval(expr[0].clone())).map_err(|e| Expr::error(format!("Invalid AST: {e}")));
+
+    //     match frontend_code {
+    //         Err(e) => e,
+    //         Ok(frontend_code) => {
+    //             let asm_code = frontend_code.compile().map_err(|e| Expr::error(format!("Invalid AST: {e}")));
+    //             if let Err(e) = asm_code {
+    //                 return e;
+    //             }
+    //             let asm_code = asm_code.unwrap();
+    //             match asm_code {
+    //                 Ok(core_asm_code) => Expr::serialize(core_asm_code.code),
+    //                 Err(std_asm_code) => Expr::serialize(std_asm_code.code),
+    //             }
+    //         }
+    //     }
+    // });
+
+    env.bind_builtin("read", |env, expr| {
+        // Read a file
+        let path = env.eval(expr[0].clone());
+
+        match path {
+            Expr::String(path) => {
+                let path = std::path::Path::new(&path);
+                let file = std::fs::File::open(path).unwrap();
+                let reader = std::io::BufReader::new(file);
+                let mut code = String::new();
+                for line in reader.lines() {
+                    code.push_str(&line.unwrap());
+                    code.push_str("\n");
+                }
+                Expr::String(code)
+            },
+            a => return Expr::error(format!("Invalid expr read {}", a))
+        }
+    });
+
+    env.bind_builtin("write", |env, expr| {
+        // Write a file
+        use std::io::Write;
+        let path = env.eval(expr[0].clone());
+
+        let content = env.eval(expr[1].clone());
+
+        match (path, content) {
+            (Expr::String(path), Expr::String(content)) => {
+                let path = std::path::Path::new(&path);
+                let mut file = std::fs::File::create(path).unwrap();
+                file.write_all(content.as_bytes()).unwrap();
+                Expr::None
+            },
+            (a, b) => return Expr::error(format!("Invalid expr write {} {}", a, b))
+        }
+    });
+
+    env.bind_builtin("shell", |env, expr| {
+        // Run a shell command
+        let cmd = env.eval(expr[0].clone());
+
+        match cmd {
+            Expr::String(cmd) => {
+                let output = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&cmd)
+                    .output()
+                    .expect("failed to execute process");
+                let stdout = String::from_utf8(output.stdout).unwrap();
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                Expr::List(vec![Expr::String(stdout), Expr::String(stderr)])
+            },
+            a => return Expr::error(format!("Invalid expr shell {}", a))
+        }
+    });
+
     env
 }
 
 fn main() {
+    env_logger::init();
+
+    use serde::{Serialize, Deserialize};
     // let mut program = PROGRAM.to_owned();
+    // #[derive(Serialize, Deserialize, Debug)]
+    // enum Test {
+    //     A(i32, String),
+    //     B(f64, String),
+    // }
+    // use sage::{lir::Compile, parse::*, targets::*};
+
+    // let frontend_code = parse_frontend(&frontend_src, path.to_str())
+    //     .unwrap_or_else(|_| panic!("Could not parse `{path:?}`"));
+
+    // let serialized = Expr::serialize(frontend_code);
+    // let x = Test::A(42, "hello".to_owned());
+    // println!("Serialized: {:?}", Expr::deserialize::<Test>(&Expr::serialize(x)).unwrap());
+
 
     let mut env = make_env();
     let args = Program::parse();
@@ -953,7 +1121,7 @@ fn main() {
                                 break
                             },
                             Err(err) => {
-                                println!("Error: {:?}", err);
+                                println!("Error: {}", err);
                                 break
                             }
                         }
@@ -963,10 +1131,16 @@ fn main() {
             }
         }
     };
-    let e = Expr::parse(&mut program).unwrap();
-
-    let result = env.eval(e);
-    if result != Expr::None {
-        println!("{}", result);
+    match Expr::parse(&mut program) {
+        Ok(e) => {
+            let result = env.eval(e);
+            if result != Expr::None {
+                println!("{}", result);
+            }
+        }
+        Err(e) => {
+            eprintln!("Parse error: {}", e);
+        }
     }
+
 }

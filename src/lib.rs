@@ -1,17 +1,30 @@
 use std::{
-    collections::{
+    borrow::Borrow, collections::{
         BTreeMap,
         HashMap,
-    },
-    hash::{
+    }, fmt::{Debug, Display, Formatter, Result as FmtResult}, hash::{
         Hash,
         Hasher,
-    },
-    sync::{Arc, RwLock},
-    fmt::{Display, Debug, Formatter, Result as FmtResult},
+    }, sync::{Arc, RwLock}
 };
 
+use nom::{
+    branch::alt,
+    bytes::complete::{escaped, tag, take_while},
+    character::complete::{alphanumeric1 as alphanumeric, char, one_of},
+    combinator::{cut, map, opt, value},
+    error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
+    multi::separated_list0,
+    number::complete::double,
+    sequence::{delimited, preceded, separated_pair, terminated},
+    Err, IResult, Parser,
+};
+
+mod parser;
+pub use parser::*;
+
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 
 lazy_static! {
     static ref SYMBOLS: RwLock<HashMap<String, Symbol>> = RwLock::new(HashMap::new());
@@ -383,7 +396,54 @@ impl<T> From<Vec<T>> for Expr where T: Into<Expr> {
     }
 }
 
+impl From<serde_json::Value> for Expr {
+    fn from(value: serde_json::Value) -> Self {
+        use serde_json::Value::*;
+        match value {
+            Null => Expr::None,
+            Bool(b) => Expr::Bool(b),
+            Number(n) => {
+                if n.is_f64() {
+                    Expr::Float(n.as_f64().unwrap())
+                } else {
+                    Expr::Int(n.as_i64().unwrap())
+                }
+            },
+            String(s) => Expr::String(s),
+            Array(a) => Expr::List(a.into_iter().map(|e| e.into()).collect()),
+            Object(o) => Expr::Tree(o.into_iter().map(|(k, v)| (Expr::String(k), v.into())).collect()),
+        }
+    }
+}
+
+impl From<Expr> for serde_json::Value {
+    fn from(expr: Expr) -> Self {
+        use serde_json::Value::*;
+        match expr {
+            Expr::None => Null,
+            Expr::Bool(b) => Bool(b),
+            Expr::Float(f) => Number(serde_json::Number::from_f64(f).unwrap()),
+            Expr::Int(i) => Number(serde_json::Number::from(i)),
+            Expr::String(s) => String(s),
+            Expr::List(l) => Array(l.into_iter().map(|e| e.into()).collect()),
+            Expr::Tree(m) => Object(m.into_iter().map(|(k, v)| match (k.into(), v.into()) {
+                (String(k), v) => (k, v),
+                (k, v) => (k.to_string(), v),
+            }).collect()),
+            _ => Null,
+        }
+    }
+}
+use serde::de::DeserializeOwned;
 impl Expr {
+    pub fn serialize<T: Serialize>(x: T) -> Self {
+        serde_json::to_value(&x).unwrap().into()
+    }
+
+    pub fn deserialize<T: DeserializeOwned>(x: &Self) -> Result<T, serde_json::Error> {
+        serde_json::from_value::<T>(x.clone().into())
+    }
+
     pub fn symbol(name: impl ToString) -> Self {
         Self::Symbol(Symbol::new(&name.to_string()))
     }
@@ -396,15 +456,23 @@ impl Expr {
         Self::Quote(Box::new(self.clone()))
     }
 
+    pub fn apply(&self, args: &[Self]) -> Self {
+        let mut result = vec![self.clone()];
+        result.extend(args.to_vec());
+        Self::List(result)
+    }
+
     pub fn parse(input: &str) -> Result<Expr, String> {
-        let mut input = Self::remove_comments(input);
-        let (mut input, expr) = Self::parse_helper(&mut input)?;
-        input = Self::remove_whitespace(input);
-        if input.is_empty() {
-            return Ok(expr);
-        } else {
-            return Err(format!("Left over input: {}", input));
-        }
+        let input = Self::remove_comments(input);
+        let result = parser::parse_program::<VerboseError<&str>>(&input)
+            .map(|(_, expr)| expr)
+            .map_err(|e| {
+                match e {
+                    Err::Error(e) | Err::Failure(e) => convert_error::<&str>(&input, e),
+                    Err::Incomplete(e) => unreachable!("Incomplete: {:?}", e)
+                }
+            });
+        result
     }
 
     fn remove_comments(input: &str) -> String {
@@ -439,10 +507,12 @@ impl Expr {
             if input.starts_with(';') {
                 let end = input.find('\n').unwrap_or(input.len());
                 input = &input[end..];
-            } else {
-                let end = input.find(';').unwrap_or(input.len());
-                output.push_str(&input[..end]);
-                input = &input[end..];
+            } else if !input.is_empty() {
+                output.push_str(&input[..1]);
+                input = &input[1..];
+                // let end = input.find(';').unwrap_or(input.len());
+                // output.push_str(&input[..end]);
+                // input = &input[end..];
             }
         }
         output
