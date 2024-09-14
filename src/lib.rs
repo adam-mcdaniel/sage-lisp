@@ -234,7 +234,6 @@ impl Env {
                         }
 
                         result => {
-                            expr = result;
                             // expr = Expr::Err(Box::new(Expr::String(format!("Cannot call {}", func))));
                             break;
                         }
@@ -399,7 +398,7 @@ impl<T> From<Vec<T>> for Expr where T: Into<Expr> {
 impl From<serde_json::Value> for Expr {
     fn from(value: serde_json::Value) -> Self {
         use serde_json::Value::*;
-        match value {
+        match value.clone() {
             Null => Expr::None,
             Bool(b) => Expr::Bool(b),
             Number(n) => {
@@ -419,7 +418,7 @@ impl From<serde_json::Value> for Expr {
 impl From<Expr> for serde_json::Value {
     fn from(expr: Expr) -> Self {
         use serde_json::Value::*;
-        match expr {
+        match expr.clone() {
             Expr::None => Null,
             Expr::Bool(b) => Bool(b),
             Expr::Float(f) => Number(serde_json::Number::from_f64(f).unwrap()),
@@ -427,6 +426,10 @@ impl From<Expr> for serde_json::Value {
             Expr::String(s) => String(s),
             Expr::List(l) => Array(l.into_iter().map(|e| e.into()).collect()),
             Expr::Tree(m) => Object(m.into_iter().map(|(k, v)| match (k.into(), v.into()) {
+                (String(k), v) => (k, v),
+                (k, v) => (k.to_string(), v),
+            }).collect()),
+            Expr::Map(m) => Object(m.into_iter().map(|(k, v)| match (k.into(), v.into()) {
                 (String(k), v) => (k, v),
                 (k, v) => (k.to_string(), v),
             }).collect()),
@@ -836,6 +839,24 @@ impl Ord for Expr {
 impl Hash for Expr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         use Expr::*;
+        // Write the tag as an integer to the hasher
+        state.write_u8(match self {
+            None => 0,
+            Float(_) => 1,
+            Int(_) => 2,
+            Bool(_) => 3,
+            String(_) => 4,
+            Symbol(_) => 5,
+            List(_) => 6,
+            Tree(_) => 7,
+            Map(_) => 8,
+            Many(_) => 9,
+            Quote(_) => 10,
+            Err(_) => 11,
+            Function(_, _, _) => 12,
+            Builtin(_) => 13,
+        });
+
         match self {
             None => 0.hash(state),
             Float(f) => f.to_bits().hash(state),
