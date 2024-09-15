@@ -1,30 +1,19 @@
 use std::{
-    borrow::Borrow, collections::{
-        BTreeMap,
-        HashMap,
-    }, fmt::{Debug, Display, Formatter, Result as FmtResult}, hash::{
-        Hash,
-        Hasher,
-    }, sync::{Arc, RwLock}
+    collections::{BTreeMap, HashMap},
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    hash::{Hash, Hasher},
+    sync::{Arc, RwLock},
 };
 
 use nom::{
-    branch::alt,
-    bytes::complete::{escaped, tag, take_while},
-    character::complete::{alphanumeric1 as alphanumeric, char, one_of},
-    combinator::{cut, map, opt, value},
-    error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
-    multi::separated_list0,
-    number::complete::double,
-    sequence::{delimited, preceded, separated_pair, terminated},
-    Err, IResult, Parser,
+    error::{convert_error, VerboseError}, Err
 };
 
 mod parser;
 pub use parser::*;
 
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 lazy_static! {
     static ref SYMBOLS: RwLock<HashMap<String, Symbol>> = RwLock::new(HashMap::new());
@@ -97,7 +86,7 @@ impl Debug for Symbol {
 /// An environment for evaluating lisp expressions
 #[derive(Debug, Default, Clone)]
 pub struct Env {
-    bindings: Arc<HashMap<Expr, Expr>>
+    bindings: Arc<HashMap<Expr, Arc<Expr>>>,
 }
 
 impl Env {
@@ -110,17 +99,20 @@ impl Env {
         self.bind(Expr::Symbol(Symbol::new(symbol)), value);
     }
 
-    pub fn bind_builtin(&mut self, symbol: &'static str, f: fn(&mut Env, &[Expr]) -> Expr) {
+    pub fn bind_builtin(&mut self, symbol: &'static str, f: fn(&mut Env, Vec<Expr>) -> Expr) {
         self.bind_symbol(symbol, Expr::Builtin(Builtin::new(f, symbol)));
     }
 
-    pub fn bind_lazy_builtin(&mut self, symbol: &'static str, f: fn(&mut Env, &[Expr]) -> Expr) {
-        self.bind_symbol(symbol, Expr::Builtin(Builtin::new(f, symbol).with_lazy_eval(true)));
+    pub fn bind_lazy_builtin(&mut self, symbol: &'static str, f: fn(&mut Env, Vec<Expr>) -> Expr) {
+        self.bind_symbol(
+            symbol,
+            Expr::Builtin(Builtin::new(f, symbol).with_lazy_eval(true)),
+        );
     }
 
     pub fn merge(&mut self, other: &Env) {
         for (k, v) in other.bindings.iter() {
-            self.bind(k.clone(), v.clone());
+            self.bind(k.clone(), (**v).clone());
         }
     }
 
@@ -134,7 +126,10 @@ impl Env {
     }
 
     pub fn get_bindings(&self) -> HashMap<Expr, Expr> {
-        self.bindings.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        self.bindings
+            .iter()
+            .map(|(k, v)| (k.clone(), (**v).clone()))
+            .collect()
     }
 
     /// Bind a symbol to a value
@@ -143,13 +138,13 @@ impl Env {
             return;
         }
         let bindings = Arc::make_mut(&mut self.bindings);
-        bindings.insert(symbol, value);
-        self.bindings = Arc::new(bindings.clone());
+        bindings.insert(symbol, Arc::new(value));
+        // self.bindings = Arc::new(bindings.clone());
     }
 
     /// Get the value of a symbol
     pub fn get(&self, symbol: &Expr) -> Option<&Expr> {
-        self.bindings.get(symbol)
+        self.bindings.get(symbol).map(|v| v.as_ref())
     }
 
     /// Remove a binding
@@ -188,31 +183,38 @@ impl Env {
                             }
 
                             if params.len() != args.len() {
-                                return Expr::Err(Box::new(Expr::String(format!("Expected {} arguments, got {}", params.len(), args.len()))));
+                                return Expr::Err(Box::new(Expr::String(format!(
+                                    "Expected {} arguments, got {}",
+                                    params.len(),
+                                    args.len()
+                                ))));
                             }
 
-                            let args = args.into_iter().map(|arg| self.eval(arg)).collect::<Vec<_>>();
+                            let args = args
+                                .into_iter()
+                                .map(|arg| self.eval(arg))
+                                .collect::<Vec<_>>();
 
                             for (param, arg) in params.into_iter().zip(args.into_iter()) {
                                 self.bind(param, arg);
                             }
 
                             expr = *body;
-                        },
+                        }
                         Builtin(f) => {
-                            expr = (f.f)(self, &args);
+                            expr = (f.f)(self, args);
                             if !f.lazy_eval {
                                 break;
                             }
                             // saved_bindings = self.bindings.clone();
-                        },
+                        }
                         Tree(t) => {
                             // Get the element of the tree
                             let key = self.eval(args.get(0).unwrap().clone());
 
                             expr = t.get(&key).cloned().unwrap_or(Expr::None);
                             break;
-                        },
+                        }
                         Map(m) => {
                             // Get the element of the map
                             let key = self.eval(args.get(0).unwrap().clone());
@@ -224,21 +226,24 @@ impl Env {
                             // }
                             expr = m.get(&key).cloned().unwrap_or(Expr::None);
                             break;
-                        },
+                        }
                         Symbol(s) => {
                             if let Some(value) = self.get(&expr) {
                                 expr = value.clone();
                             } else {
-                                expr = Expr::Err(Box::new(Expr::String(format!("Symbol {} not found", s.name()))));
+                                expr = Expr::Err(Box::new(Expr::String(format!(
+                                    "Symbol {} not found",
+                                    s.name()
+                                ))));
                             }
                         }
 
-                        result => {
+                        _result => {
                             // expr = Expr::Err(Box::new(Expr::String(format!("Cannot call {}", func))));
                             break;
                         }
                     }
-                },
+                }
                 Many(d) => {
                     if d.is_empty() {
                         return Expr::None;
@@ -249,7 +254,7 @@ impl Env {
                         self.eval(e.clone());
                     }
                     expr = d.last().unwrap().clone();
-                },
+                }
                 Map(m) => {
                     let mut new_map = HashMap::new();
                     for (k, v) in m.iter() {
@@ -257,7 +262,7 @@ impl Env {
                     }
                     expr = Expr::Map(new_map);
                     break;
-                },
+                }
                 Tree(t) => {
                     let mut new_tree = BTreeMap::new();
                     for (k, v) in t.iter() {
@@ -265,12 +270,12 @@ impl Env {
                     }
                     expr = Expr::Tree(new_tree);
                     break;
-                },
+                }
                 Quote(e) => {
                     expr = *e.clone();
                     break;
-                },
-                Function(_, args, body) => {
+                }
+                Function(Option::None, args, body) => {
                     // Replace the environment with a new one
                     let mut new_env = self.clone();
                     for arg in args.iter() {
@@ -291,13 +296,13 @@ impl Env {
 
 #[derive(Debug, Clone)]
 pub struct Builtin {
-    pub f: fn(&mut Env, &[Expr]) -> Expr,
+    pub f: fn(&mut Env, Vec<Expr>) -> Expr,
     pub name: &'static str,
-    pub(crate) lazy_eval: bool
+    pub(crate) lazy_eval: bool,
 }
 
 impl Builtin {
-    pub fn new(f: fn(&mut Env, &[Expr]) -> Expr, name: &'static str) -> Self {
+    pub fn new(f: fn(&mut Env, Vec<Expr>) -> Expr, name: &'static str) -> Self {
         Self {
             f,
             name,
@@ -306,13 +311,10 @@ impl Builtin {
     }
 
     pub fn with_lazy_eval(self, lazy_eval: bool) -> Self {
-        Self {
-            lazy_eval,
-            ..self
-        }
+        Self { lazy_eval, ..self }
     }
 
-    pub fn apply(&self, env: &mut Env, args: &[Expr]) -> Expr {
+    pub fn apply(&self, env: &mut Env, args: Vec<Expr>) -> Expr {
         (self.f)(env, args)
     }
 }
@@ -321,10 +323,6 @@ impl Display for Builtin {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(f, "<builtin {}>", self.name)
     }
-}
-
-fn is_valid_symbol_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '+' || c == '*' || c == '.' || c == '/' || c == '\\' || c == '%' || c == '!' || c == '?' || c == '=' || c == '<' || c == '>' || c == '^' || c == '#'
 }
 
 /// A lisp expression to be evaluated
@@ -352,7 +350,7 @@ pub enum Expr {
     Map(HashMap<Expr, Expr>),
 
     /// A block of expressions to be evaluated in order
-    Many(Vec<Expr>),
+    Many(Arc<Vec<Expr>>),
 
     /// A quoted expression
     Quote(Box<Expr>),
@@ -389,7 +387,10 @@ impl From<f64> for Expr {
     }
 }
 
-impl<T> From<Vec<T>> for Expr where T: Into<Expr> {
+impl<T> From<Vec<T>> for Expr
+where
+    T: Into<Expr>,
+{
     fn from(v: Vec<T>) -> Self {
         Self::List(v.into_iter().map(|e| e.into()).collect())
     }
@@ -407,10 +408,14 @@ impl From<serde_json::Value> for Expr {
                 } else {
                     Expr::Int(n.as_i64().unwrap())
                 }
-            },
+            }
             String(s) => Expr::String(s),
             Array(a) => Expr::List(a.into_iter().map(|e| e.into()).collect()),
-            Object(o) => Expr::Tree(o.into_iter().map(|(k, v)| (Expr::String(k), v.into())).collect()),
+            Object(o) => Expr::Tree(
+                o.into_iter()
+                    .map(|(k, v)| (Expr::String(k), v.into()))
+                    .collect(),
+            ),
         }
     }
 }
@@ -425,14 +430,22 @@ impl From<Expr> for serde_json::Value {
             Expr::Int(i) => Number(serde_json::Number::from(i)),
             Expr::String(s) => String(s),
             Expr::List(l) => Array(l.into_iter().map(|e| e.into()).collect()),
-            Expr::Tree(m) => Object(m.into_iter().map(|(k, v)| match (k.into(), v.into()) {
-                (String(k), v) => (k, v),
-                (k, v) => (k.to_string(), v),
-            }).collect()),
-            Expr::Map(m) => Object(m.into_iter().map(|(k, v)| match (k.into(), v.into()) {
-                (String(k), v) => (k, v),
-                (k, v) => (k.to_string(), v),
-            }).collect()),
+            Expr::Tree(m) => Object(
+                m.into_iter()
+                    .map(|(k, v)| match (k.into(), v.into()) {
+                        (String(k), v) => (k, v),
+                        (k, v) => (k.to_string(), v),
+                    })
+                    .collect(),
+            ),
+            Expr::Map(m) => Object(
+                m.into_iter()
+                    .map(|(k, v)| match (k.into(), v.into()) {
+                        (String(k), v) => (k, v),
+                        (k, v) => (k.to_string(), v),
+                    })
+                    .collect(),
+            ),
             _ => Null,
         }
     }
@@ -469,11 +482,9 @@ impl Expr {
         let input = Self::remove_comments(input);
         let result = parser::parse_program::<VerboseError<&str>>(&input)
             .map(|(_, expr)| expr)
-            .map_err(|e| {
-                match e {
-                    Err::Error(e) | Err::Failure(e) => convert_error::<&str>(&input, e),
-                    Err::Incomplete(e) => unreachable!("Incomplete: {:?}", e)
-                }
+            .map_err(|e| match e {
+                Err::Error(e) | Err::Failure(e) => convert_error::<&str>(&input, e),
+                Err::Incomplete(e) => unreachable!("Incomplete: {:?}", e),
             });
         result
     }
@@ -499,7 +510,7 @@ impl Expr {
                     }
 
                     if c == '"' {
-                       break
+                        break;
                     }
                 }
 
@@ -520,253 +531,6 @@ impl Expr {
         }
         output
     }
-
-    fn remove_whitespace(mut input: &mut str) -> &mut str {
-        while input.starts_with(' ') || input.starts_with('\n') || input.starts_with('\t') {
-            input = &mut input[1..];
-        }
-        input
-    }
-
-    fn parse_helper(mut input: &mut str) -> Result<(&mut str, Expr), String> {
-        input = Self::remove_whitespace(input);
-
-        // If the input is empty, return None
-        if input.is_empty() {
-            return Ok((input, Expr::None));
-        }
-        
-        // Try to parse as a number
-        // Split by whitespace
-        let mut first_token = input.split_whitespace().next().ok_or("Could not get first token")?.to_owned();
-        first_token = first_token.chars().take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
-        
-
-        if let Ok(i) = first_token.parse::<i64>() {
-            // Move the input past the number
-            let input = &mut input[first_token.len()..];
-            return Ok((input, Expr::Int(i)));
-        }
-
-        if let Ok(f) = first_token.parse::<f64>() {
-            // Move the input past the number
-            let input = &mut input[first_token.len()..];
-            return Ok((input, Expr::Float(f)));
-        }
-        
-        if input.starts_with("nil") {
-            // Move the input past the symbol
-            let input = &mut input["nil".len()..];
-            return Ok((input, Expr::None));
-        }
-
-        if input.starts_with("true") {
-            // Move the input past the symbol
-            let input = &mut input["true".len()..];
-            return Ok((input, Expr::Bool(true)));
-        }
-
-        if input.starts_with("false") {
-            // Move the input past the symbol
-            let input = &mut input["false".len()..];
-            return Ok((input, Expr::Bool(false)));
-        }
-
-        // Try to parse as a string
-        if input.starts_with('"') {
-            // Find the end of the string (the next quote character)
-            let mut end = 1;
-            let mut last_was_escape = false;
-            for (i, c) in input[1..].char_indices() {
-                if c == '\\' && !last_was_escape {
-                    last_was_escape = true;
-                    continue;
-                }
-                if last_was_escape {
-                    last_was_escape = false;
-                    continue;
-                }
-
-                if c == '"' {
-                    end = i;
-                    break;
-                }
-            }
-
-            let string = input[1..end + 1].to_string();
-            // Move the input past the string
-            let input = &mut input[end + 2..];
-            return Ok((input, Expr::String(string)));
-        }
-
-        // Parse a quoted expression
-        if input.starts_with('\'') {
-            // Parse the quoted expression
-            let (input, expr) = Expr::parse_helper(&mut input[1..])?;
-            return Ok((input, Expr::Quote(Box::new(expr))));
-        }
-
-        // Try to parse as a list
-        if input.starts_with('(') {
-            let mut list = Vec::new();
-            let mut input = &mut input[1..];
-            loop {
-                if input.is_empty() {
-                    return Err("Mismatching parentheses".to_string());
-                }
-                // Skip whitespace
-                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
-                    input = &mut input[1..];
-                }
-
-                if input.starts_with(')') {
-                    // Move the input past the closing parenthesis
-                    input = &mut input[1..];
-                    return Ok((input, Expr::List(list)));
-                }
-
-                let (new_input, expr) = Expr::parse_helper(input)?;
-                input = new_input;
-                list.push(expr);
-            }
-        }
-
-        if input.starts_with('{') {
-            // Parse a do block
-            let mut do_block = Vec::new();
-            let mut input = &mut input[1..];
-            loop {
-                if input.is_empty() {
-                    return Err("Mismatching braces".to_string());
-                }
-                // Skip whitespace
-                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
-                    input = &mut input[1..];
-                }
-
-                if input.starts_with('}') {
-                    // Move the input past the closing brace
-                    input = &mut input[1..];
-                    return Ok((input, Expr::Many(do_block)));
-                }
-
-                let (new_input, expr) = Expr::parse_helper(input)?;
-                input = new_input;
-                do_block.push(expr);
-            }
-        }
-
-        // Try to parse as a map
-        if input.starts_with("#[") {
-            let mut map = HashMap::new();
-            let mut input = &mut input[2..];
-            loop {
-                // Skip whitespace
-                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
-                    input = &mut input[1..];
-                }
-
-                if input.starts_with(']') {
-                    // Move the input past the closing brace
-                    input = &mut input[1..];
-                    return Ok((input, Expr::Map(map)));
-                }
-
-                let (new_input, key) = Expr::parse_helper(input)?;
-                input = new_input;
-
-                // Skip whitespace
-                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
-                    input = &mut input[1..];
-                }
-
-                let (new_input, value) = Expr::parse_helper(input)?;
-                input = new_input;
-                
-                map.insert(key, value);
-            }
-        }
-
-        // Try to parse as a tree
-        if input.starts_with('[') {
-            let mut tree = BTreeMap::new();
-            let mut input = &mut input[1..];
-            loop {
-                // Skip whitespace
-                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
-                    input = &mut input[1..];
-                }
-
-                if input.starts_with(']') {
-                    // Move the input past the closing bracket
-                    input = &mut input[1..];
-                    return Ok((input, Expr::Tree(tree)));
-                }
-
-                let (new_input, key) = Expr::parse_helper(input)?;
-                input = new_input;
-
-                // Skip whitespace
-                while input.starts_with(' ') || input.starts_with('\t') || input.starts_with('\n') {
-                    input = &mut input[1..];
-                }
-
-                let (new_input, value) = Expr::parse_helper(input)?;
-                input = new_input;
-
-                tree.insert(key, value);
-            }
-        }
-
-
-        /*
-        // Try to parse as a function
-        if input.starts_with("fn") {
-            // Parse the arguments
-            // println!("Parsing function");
-            // Remove the fn keyword
-            let mut input = &mut input["fn".len()..];
-
-            let mut args_list = Vec::new();
-            while !input.starts_with('|') {
-                if input.is_empty() {
-                    return Err("No function body, missing |".to_string());
-                }
-                let (i, arg) = Expr::parse_helper(input)?;
-                input = i;
-                args_list.push(arg);
-                // Remove leading whitespace
-                while input.starts_with(' ') {
-                    input = &mut input[1..];
-                }
-            }
-
-            // Remove the | character
-            while input.starts_with(' ') || input.starts_with('|') {
-                input = &mut input[1..];
-            }
-
-            // Make body mutable so we can update it
-            let (input, body) = Expr::parse_helper(input)?;
-            // This parses functions of the form:
-            // fn a b c | body
-            return Ok((input, Expr::Function(None, args_list, Box::new(body))));
-        }
-         */
-
-        // Try to parse as a symbol
-        let mut symbol = String::new();
-        while input.chars().next().is_some() && is_valid_symbol_char(input.chars().next().unwrap()) {
-            symbol.push(input.chars().next().ok_or("Could not get symbol characters")?);
-            input = &mut input[1..];
-        }
-        // println!("Symbol: {}", symbol);
-        if !symbol.is_empty() {
-            return Ok((input, Expr::Symbol(Symbol::new(&symbol))));
-        }
-
-        Err(format!("All possible expressions mismatched at {input}"))
-    }
 }
 
 impl PartialEq for Expr {
@@ -783,7 +547,9 @@ impl PartialEq for Expr {
             (List(l1), List(l2)) => l1 == l2,
             (Tree(t1), Tree(t2)) => t1 == t2,
             (Map(m1), Map(m2)) => m1 == m2,
-            (Function(_, args1, body1), Function(_, args2, body2)) => args1 == args2 && body1 == body2,
+            (Function(_, args1, body1), Function(_, args2, body2)) => {
+                args1 == args2 && body1 == body2
+            }
             (Quote(e1), Quote(e2)) => e1 == e2,
             (Err(e1), Err(e2)) => e1 == e2,
             (Bool(b1), Bool(b2)) => b1 == b2,
@@ -810,7 +576,7 @@ impl PartialOrd for Expr {
                 let m1 = BTreeMap::from_iter(m1.iter());
                 let m2 = BTreeMap::from_iter(m2.iter());
                 m1.partial_cmp(&m2)
-            },
+            }
             (Quote(e1), Quote(e2)) => e1.partial_cmp(e2),
             (Function(_, args1, body1), Function(_, args2, body2)) => {
                 if args1 == args2 {
@@ -818,9 +584,11 @@ impl PartialOrd for Expr {
                 } else {
                     args1.partial_cmp(args2)
                 }
-            },
+            }
             (Err(e1), Err(e2)) => e1.partial_cmp(e2),
-            (Builtin(f1), Builtin(f2)) => (f1 as *const _ as usize).partial_cmp(&(f2 as *const _ as usize)),
+            (Builtin(f1), Builtin(f2)) => {
+                (f1 as *const _ as usize).partial_cmp(&(f2 as *const _ as usize))
+            }
             (Bool(b1), Bool(b2)) => b1.partial_cmp(b2),
             (Many(d1), Many(d2)) => d1.partial_cmp(d2),
             _ => Option::None,
@@ -866,16 +634,14 @@ impl Hash for Expr {
             Symbol(s) => s.hash(state),
             List(l) => l.hash(state),
             Tree(t) => t.hash(state),
-            Map(m) => {
-                BTreeMap::from_iter(m.iter()).hash(state)
-            },
+            Map(m) => BTreeMap::from_iter(m.iter()).hash(state),
             Many(d) => d.hash(state),
             Quote(e) => e.hash(state),
             Err(e) => e.hash(state),
             Function(_, args, body) => {
                 args.hash(state);
                 body.hash(state);
-            },
+            }
             Builtin(f) => (f as *const _ as usize).hash(state),
         }
     }
@@ -902,7 +668,7 @@ impl Display for Expr {
                     write!(f, "{}", e)?;
                 }
                 write!(f, " }}")
-            },
+            }
             List(e) => {
                 write!(f, "(")?;
                 for (i, e) in e.iter().enumerate() {
@@ -912,7 +678,7 @@ impl Display for Expr {
                     write!(f, "{}", e)?;
                 }
                 write!(f, ")")
-            },
+            }
             Tree(t) => {
                 write!(f, "[")?;
                 for (i, (k, v)) in t.iter().enumerate() {
@@ -922,7 +688,7 @@ impl Display for Expr {
                     write!(f, "{} {}", k, v)?;
                 }
                 write!(f, "]")
-            },
+            }
             Map(m) => {
                 write!(f, "#[")?;
                 for (i, (k, v)) in m.iter().enumerate() {
@@ -932,7 +698,7 @@ impl Display for Expr {
                     write!(f, "{} {}", k, v)?;
                 }
                 write!(f, "]")
-            },
+            }
             Function(_, args, body) => {
                 write!(f, "(lambda (")?;
                 for (i, arg) in args.iter().enumerate() {
@@ -942,7 +708,7 @@ impl Display for Expr {
                     write!(f, "{}", arg)?;
                 }
                 write!(f, ") {})", body)
-            },
+            }
             Builtin(b) => write!(f, "<builtin {}>", b.name),
         }
     }

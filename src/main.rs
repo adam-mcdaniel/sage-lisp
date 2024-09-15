@@ -1,12 +1,10 @@
-
-use sage_lisp::*;
 use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use sage_lisp::*;
 // use sage::{frontend, lir::Compile, parse::*, targets::CompiledTarget, vm::*};
 use std::io::BufRead;
 
-const CALL_STACK_SIZE: usize = 8192;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -15,7 +13,7 @@ pub struct Program {
     #[arg(name = "program_name")]
     program_name: Option<String>,
     // A string to evaluate.
-    #[arg(short='c', long)]
+    #[arg(short = 'c', long)]
     program: Option<String>,
 }
 
@@ -46,36 +44,34 @@ fn make_env() -> Env {
                     let mut list = a.clone();
                     list.extend(b);
                     sum = Expr::List(list);
-                },
+                }
                 (Expr::List(a), b) => {
                     let mut list = a.clone();
                     list.push(b);
                     sum = Expr::List(list);
-                },
-                (a, b) => return Expr::error(format!("Invalid expr {} + {}", a, b))
+                }
+                (a, b) => return Expr::error(format!("Invalid expr {} + {}", a, b)),
             }
         }
         sum
     });
     env.alias("+", "add");
 
-    env.bind_builtin("-", 
-        |env, exprs| {
-            let mut diff = Expr::default();
-            for e in exprs {
-                let e = env.eval(e.clone());
-                match (diff, e) {
-                    (Expr::None, b) => diff = b,
-                    (Expr::Int(a), Expr::Int(b)) => diff = Expr::Int(a - b),
-                    (Expr::Float(a), Expr::Float(b)) => diff = Expr::Float(a - b),
-                    (Expr::Int(a), Expr::Float(b)) => diff = Expr::Float(a as f64 - b),
-                    (Expr::Float(a), Expr::Int(b)) => diff = Expr::Float(a - b as f64),
-                    (a, b) => return Expr::error(format!("Invalid expr {} - {}", a, b))
-                }
+    env.bind_builtin("-", |env, exprs| {
+        let mut diff = Expr::default();
+        for e in exprs {
+            let e = env.eval(e.clone());
+            match (diff, e) {
+                (Expr::None, b) => diff = b,
+                (Expr::Int(a), Expr::Int(b)) => diff = Expr::Int(a - b),
+                (Expr::Float(a), Expr::Float(b)) => diff = Expr::Float(a - b),
+                (Expr::Int(a), Expr::Float(b)) => diff = Expr::Float(a as f64 - b),
+                (Expr::Float(a), Expr::Int(b)) => diff = Expr::Float(a - b as f64),
+                (a, b) => return Expr::error(format!("Invalid expr {} - {}", a, b)),
             }
-            diff
         }
-    );
+        diff
+    });
     env.alias("-", "sub");
 
     env.bind_builtin("*", |env, exprs| {
@@ -94,8 +90,8 @@ fn make_env() -> Env {
                         list.extend(a.clone());
                     }
                     product = Expr::List(list);
-                },
-                (a, b) => return Expr::error(format!("Invalid expr {} * {}", a, b))
+                }
+                (a, b) => return Expr::error(format!("Invalid expr {} * {}", a, b)),
             }
         }
         product
@@ -112,7 +108,7 @@ fn make_env() -> Env {
                 (Expr::Float(a), Expr::Float(b)) => quotient = Expr::Float(a / b),
                 (Expr::Int(a), Expr::Float(b)) => quotient = Expr::Float(a as f64 / b),
                 (Expr::Float(a), Expr::Int(b)) => quotient = Expr::Float(a / b as f64),
-                (a, b) => return Expr::error(format!("Invalid expr {} / {}", a, b))
+                (a, b) => return Expr::error(format!("Invalid expr {} / {}", a, b)),
             }
         }
         quotient
@@ -129,17 +125,17 @@ fn make_env() -> Env {
                 (Expr::Float(a), Expr::Float(b)) => quotient = Expr::Float(a % b),
                 (Expr::Int(a), Expr::Float(b)) => quotient = Expr::Float(a as f64 % b),
                 (Expr::Float(a), Expr::Int(b)) => quotient = Expr::Float(a % b as f64),
-                (a, b) => return Expr::error(format!("Invalid expr {} % {}", a, b))
+                (a, b) => return Expr::error(format!("Invalid expr {} % {}", a, b)),
             }
         }
         quotient
     });
     env.alias("%", "rem");
-    
+
     env.bind_builtin("=", |env, exprs| {
         let a = env.eval(exprs[0].clone());
         let b = env.eval(exprs[1].clone());
-        
+
         Expr::Bool(a == b)
     });
     env.alias("=", "==");
@@ -147,35 +143,35 @@ fn make_env() -> Env {
     env.bind_builtin("!=", |env, exprs| {
         let a = env.eval(exprs[0].clone());
         let b = env.eval(exprs[1].clone());
-        
+
         Expr::Bool(a != b)
     });
 
     env.bind_builtin("<=", |env, exprs| {
         let a = env.eval(exprs[0].clone());
         let b = env.eval(exprs[1].clone());
-        
+
         Expr::Bool(a <= b)
     });
 
     env.bind_builtin(">=", |env, exprs| {
         let a = env.eval(exprs[0].clone());
         let b = env.eval(exprs[1].clone());
-        
+
         Expr::Bool(a >= b)
     });
 
     env.bind_builtin("<", |env, exprs| {
         let a = env.eval(exprs[0].clone());
         let b = env.eval(exprs[1].clone());
-        
+
         Expr::Bool(a < b)
     });
 
     env.bind_builtin(">", |env, exprs| {
         let a = env.eval(exprs[0].clone());
         let b = env.eval(exprs[1].clone());
-        
+
         Expr::Bool(a > b)
     });
 
@@ -198,24 +194,18 @@ fn make_env() -> Env {
         }
     });
 
-    env.bind_builtin("define", 
-        |env, exprs| {
-            let name = exprs[0].clone();
-            let value = env.eval(exprs[1].clone());
-            env
-                .bind(name, value);
-            Expr::None
-        }
-    );
+    env.bind_builtin("define", |env, exprs| {
+        let name = exprs[0].clone();
+        let value = env.eval(exprs[1].clone());
+        env.bind(name, value);
+        Expr::None
+    });
 
-    env.bind_builtin("undefine", 
-        |env, exprs| {
-            let name = exprs[0].clone();
-            env
-                .unbind(&name);
-            Expr::None
-        }
-    );
+    env.bind_builtin("undefine", |env, exprs| {
+        let name = exprs[0].clone();
+        env.unbind(&name);
+        Expr::None
+    });
 
     env.bind_builtin("defun", |env, args| {
         let name = args[0].clone();
@@ -237,7 +227,7 @@ fn make_env() -> Env {
             match e {
                 Expr::String(s) => print!("{}", s),
                 Expr::Symbol(s) => print!("{}", s.name()),
-                _ => print!("{}", e)
+                _ => print!("{}", e),
             }
         }
         println!();
@@ -253,7 +243,8 @@ fn make_env() -> Env {
     // });
 
     env.bind_lazy_builtin("do", |_env, exprs| {
-        Expr::Many(Vec::from(exprs))
+        use std::sync::Arc;
+        Expr::Many(Arc::new(Vec::from(exprs)))
     });
 
     env.bind_builtin("sqrt", |env, expr| {
@@ -261,7 +252,7 @@ fn make_env() -> Env {
         match e {
             Expr::Int(i) => Expr::Float((i as f64).sqrt()),
             Expr::Float(f) => Expr::Float(f.sqrt()),
-            e => Expr::error(format!("Invalid expr sqrt {}", e))
+            e => Expr::error(format!("Invalid expr sqrt {}", e)),
         }
     });
 
@@ -273,13 +264,13 @@ fn make_env() -> Env {
             (Expr::Float(a), Expr::Float(b)) => Expr::Float(a.powf(b)),
             (Expr::Int(a), Expr::Float(b)) => Expr::Float((a as f64).powf(b)),
             (Expr::Float(a), Expr::Int(b)) => Expr::Float(a.powf(b as f64)),
-            (a, b) => Expr::error(format!("Invalid expr {} ^ {}", a, b))
+            (a, b) => Expr::error(format!("Invalid expr {} ^ {}", a, b)),
         }
     });
 
     env.alias("^", "pow");
 
-    let lambda = |env: &mut Env, expr: &[Expr]| {
+    let lambda = |env: &mut Env, expr: Vec<Expr>| {
         let params = expr[0].clone();
         let body = expr[1].clone();
         if let Expr::List(params) = params {
@@ -302,7 +293,7 @@ fn make_env() -> Env {
                         new_env.bind(param.clone(), env.eval(arg.clone()));
                     }
                     new_env.eval(*body.clone())
-                },
+                }
                 Expr::Function(None, params, body) => {
                     let mut new_env = env.clone();
                     for (param, arg) in params.iter().zip(args.iter()) {
@@ -310,10 +301,8 @@ fn make_env() -> Env {
                     }
                     new_env.eval(*body.clone())
                 }
-                Expr::Builtin(f) => {
-                    f.apply(&mut env.clone(), &args)
-                },
-                f => Expr::error(format!("Invalid function {f} apply {}", Expr::from(args)))
+                Expr::Builtin(f) => f.apply(&mut env.clone(), args),
+                f => Expr::error(format!("Invalid function {f} apply {}", Expr::from(args))),
             }
         } else {
             Expr::error(format!("Invalid function {f} apply {}", Expr::from(args)))
@@ -334,7 +323,7 @@ fn make_env() -> Env {
             Expr::List(vec![a, b])
         }
     });
-    let head = |env: &mut Env, expr: &[Expr]| {
+    let head = |env: &mut Env, expr: Vec<Expr>| {
         let a = env.eval(expr[0].clone());
         if let Expr::List(a) = a {
             a[0].clone()
@@ -342,7 +331,7 @@ fn make_env() -> Env {
             Expr::error(format!("Invalid head {a}"))
         }
     };
-    let tail = |env: &mut Env, expr: &[Expr]| {
+    let tail = |env: &mut Env, expr: Vec<Expr>| {
         let a = env.eval(expr[0].clone());
         if let Expr::List(a) = a {
             Expr::List(a[1..].to_vec())
@@ -356,16 +345,16 @@ fn make_env() -> Env {
     env.bind_builtin("cdr", tail);
     env.bind_builtin("tail", tail);
 
-    let format = |env: &mut Env, expr: &[Expr]| {
+    let format = |env: &mut Env, expr: Vec<Expr>| {
         let format = env.eval(expr[0].clone());
         // Collect the args
         let args = expr[1..].to_vec();
-        
+
         let mut format = match format {
             Expr::String(s) => s,
-            e => return Expr::error(format!("Invalid format {e}"))
+            e => return Expr::error(format!("Invalid format {e}")),
         };
-        
+
         // Find all of the format specifiers.
         let mut specifiers = vec![];
         for (i, c) in format.chars().enumerate() {
@@ -377,7 +366,7 @@ fn make_env() -> Env {
                     }
                     j += 1;
                 }
-                specifiers.push(format[i+1..j].to_owned());
+                specifiers.push(format[i + 1..j].to_owned());
             }
         }
 
@@ -387,13 +376,13 @@ fn make_env() -> Env {
                 continue;
             }
             let name = Expr::Symbol(Symbol::new(name));
-            
+
             let value = env.eval(name.clone());
             let specifier = format!("{{{name}}}");
             match value {
                 Expr::String(s) => {
                     format = format.replacen(&specifier, &s, 1);
-                },
+                }
                 other => {
                     format = format.replacen(&specifier, &other.to_string(), 1);
                 }
@@ -401,7 +390,7 @@ fn make_env() -> Env {
         }
 
         // Replace the empty specifiers with the args.
-        let mut i = 0;        
+        let mut i = 0;
         for name in &specifiers {
             if !name.is_empty() {
                 continue;
@@ -414,7 +403,7 @@ fn make_env() -> Env {
             match value {
                 Expr::String(s) => {
                     format = format.replacen(&specifier, &s, 1);
-                },
+                }
                 other => {
                     format = format.replacen(&specifier, &other.to_string(), 1);
                 }
@@ -426,7 +415,7 @@ fn make_env() -> Env {
         if i < args.len() {
             return Expr::error("Too many arguments");
         }
-        
+
         Expr::String(format)
     };
 
@@ -458,23 +447,19 @@ fn make_env() -> Env {
         env.eval(e)
     });
 
-    env.bind_builtin("exit", |env, expr| {
-        match env.eval(expr[0].clone()) {
-            Expr::Int(i) => std::process::exit(i as i32),
-            Expr::String(s) => {
-                eprintln!("{s}");
-                std::process::exit(1);
-            }
-            e => {
-                eprintln!("{e}");
-                std::process::exit(1);
-            }
+    env.bind_builtin("exit", |env, expr| match env.eval(expr[0].clone()) {
+        Expr::Int(i) => std::process::exit(i as i32),
+        Expr::String(s) => {
+            eprintln!("{s}");
+            std::process::exit(1);
+        }
+        e => {
+            eprintln!("{e}");
+            std::process::exit(1);
         }
     });
 
-    env.bind_builtin("quote", |_env, expr| {
-        expr[0].clone()
-    });
+    env.bind_builtin("quote", |_env, expr| expr[0].clone());
 
     env.bind_builtin("or", |env, expr| {
         for e in expr {
@@ -500,8 +485,7 @@ fn make_env() -> Env {
         let e = env.eval(expr[0].clone());
         match e {
             Expr::Bool(b) => Expr::Bool(!b),
-            e => return Expr::error(format!("Invalid not {e}"))
-
+            e => return Expr::error(format!("Invalid not {e}")),
         }
     });
 
@@ -512,7 +496,7 @@ fn make_env() -> Env {
             Expr::List(l) => Expr::Int(l.len() as i64),
             Expr::Map(m) => Expr::Int(m.len() as i64),
             Expr::Tree(t) => Expr::Int(t.len() as i64),
-            e => Expr::error(format!("Invalid len {e}"))
+            e => Expr::error(format!("Invalid len {e}")),
         }
     });
 
@@ -542,7 +526,7 @@ fn make_env() -> Env {
                     new_env.bind(name, env.eval(value));
                 }
             }
-            bindings => return Expr::error(format!("Invalid bindings {bindings}"))
+            bindings => return Expr::error(format!("Invalid bindings {bindings}")),
         }
         new_env.eval(body)
     });
@@ -552,17 +536,21 @@ fn make_env() -> Env {
         let b = env.eval(expr[1].clone());
 
         match (a, b) {
-            (Expr::String(a), Expr::Int(b)) => Expr::String(a.chars().nth(b as usize).unwrap_or('\0').to_string()),
+            (Expr::String(a), Expr::Int(b)) => {
+                Expr::String(a.chars().nth(b as usize).unwrap_or('\0').to_string())
+            }
             (Expr::List(a), Expr::Int(b)) => a.get(b as usize).cloned().unwrap_or(Expr::None),
             (Expr::Map(a), Expr::Symbol(b)) => {
                 // a.get(&b).cloned().unwrap_or(Expr::None)
-                a.get(&Expr::Symbol(b.clone())).cloned()
-                    .unwrap_or_else(|| a.get(&Expr::String(b.name().to_owned()))
-                    .cloned().unwrap_or(Expr::None))
-            },
+                a.get(&Expr::Symbol(b.clone())).cloned().unwrap_or_else(|| {
+                    a.get(&Expr::String(b.name().to_owned()))
+                        .cloned()
+                        .unwrap_or(Expr::None)
+                })
+            }
             (Expr::Map(a), b) => a.get(&b).cloned().unwrap_or(Expr::None),
             (Expr::Tree(a), b) => a.get(&b).cloned().unwrap_or(Expr::None),
-            (a, b) => return Expr::error(format!("Invalid expr get {} {}", a, b))
+            (a, b) => return Expr::error(format!("Invalid expr get {} {}", a, b)),
         }
     });
     env.alias("get", "@");
@@ -577,26 +565,30 @@ fn make_env() -> Env {
                 if b == a.len() as i64 {
                     a.push_str(&c.to_string());
                 } else {
-                    a = a.chars().enumerate().map(|(i, c)| if i == b as usize { c } else { '\0' }).collect();
+                    a = a
+                        .chars()
+                        .enumerate()
+                        .map(|(i, c)| if i == b as usize { c } else { '\0' })
+                        .collect();
                 }
                 Expr::String(a)
-            },
+            }
             (Expr::List(mut a), Expr::Int(b)) => {
                 if b as usize >= a.len() {
                     a.resize(b as usize + 1, Expr::None);
                 }
                 a[b as usize] = c;
                 Expr::List(a)
-            },
+            }
             (Expr::Map(mut a), b) => {
                 a.insert(b, c);
                 Expr::Map(a)
-            },
+            }
             (Expr::Tree(mut a), b) => {
                 a.insert(b, c);
                 Expr::Tree(a)
-            },
-            (a, b) => return Expr::error(format!("Invalid expr set {} {} {}", a, b, c))
+            }
+            (a, b) => return Expr::error(format!("Invalid expr set {} {} {}", a, b, c)),
         }
     });
 
@@ -611,8 +603,8 @@ fn make_env() -> Env {
                     list.push(Expr::List(vec![a, b]));
                 }
                 Expr::List(list)
-            },
-            (a, b) => return Expr::error(format!("Invalid expr zip {} {}", a, b))
+            }
+            (a, b) => return Expr::error(format!("Invalid expr zip {} {}", a, b)),
         }
     });
 
@@ -634,10 +626,10 @@ fn make_env() -> Env {
                     }
                 }
                 Expr::Map(map)
-            },
+            }
             Expr::Map(a) => return Expr::Map(a),
             Expr::Tree(a) => return Expr::Map(a.into_iter().collect()),
-            a => return Expr::error(format!("Invalid expr to-map {}", Expr::from(a)))
+            a => return Expr::error(format!("Invalid expr to-map {}", Expr::from(a))),
         }
     });
 
@@ -659,10 +651,10 @@ fn make_env() -> Env {
                     }
                 }
                 Expr::Tree(tree)
-            },
+            }
             Expr::Map(a) => return Expr::Tree(a.into_iter().collect()),
             Expr::Tree(a) => return Expr::Tree(a),
-            a => return Expr::error(format!("Invalid expr to-tree {}", Expr::from(a)))
+            a => return Expr::error(format!("Invalid expr to-tree {}", Expr::from(a))),
         }
     });
 
@@ -675,16 +667,16 @@ fn make_env() -> Env {
                     list.push(Expr::List(vec![k, v]));
                 }
                 Expr::List(list)
-            },
+            }
             Expr::Tree(a) => {
                 let mut list = vec![];
                 for (k, v) in a {
                     list.push(Expr::List(vec![k, v]));
                 }
                 Expr::List(list)
-            },
+            }
             Expr::List(a) => return Expr::List(a),
-            a => return Expr::error(format!("Invalid expr to-list {}", a))
+            a => return Expr::error(format!("Invalid expr to-list {}", a)),
         }
     });
 
@@ -698,7 +690,7 @@ fn make_env() -> Env {
                     list.push(env.eval(Expr::List(vec![f.clone(), e])));
                 }
                 Expr::List(list)
-            },
+            }
             Expr::Map(a) => {
                 let mut map = std::collections::HashMap::new();
                 for (k, v) in a {
@@ -711,7 +703,7 @@ fn make_env() -> Env {
                     }
                 }
                 Expr::Map(map)
-            },
+            }
             Expr::Tree(a) => {
                 let mut tree = std::collections::BTreeMap::new();
                 for (k, v) in a {
@@ -724,8 +716,8 @@ fn make_env() -> Env {
                     }
                 }
                 Expr::Tree(tree)
-            },
-            a => return Expr::error(format!("Invalid expr map {}", a))
+            }
+            a => return Expr::error(format!("Invalid expr map {}", a)),
         }
     });
 
@@ -742,7 +734,7 @@ fn make_env() -> Env {
                     }
                 }
                 Expr::List(list)
-            },
+            }
             Expr::Map(a) => {
                 let mut map = std::collections::HashMap::new();
                 for (k, v) in a {
@@ -752,7 +744,7 @@ fn make_env() -> Env {
                     }
                 }
                 Expr::Map(map)
-            },
+            }
             Expr::Tree(a) => {
                 let mut tree = std::collections::BTreeMap::new();
                 for (k, v) in a {
@@ -762,8 +754,8 @@ fn make_env() -> Env {
                     }
                 }
                 Expr::Tree(tree)
-            },
-            a => return Expr::error(format!("Invalid expr filter {}", a))
+            }
+            a => return Expr::error(format!("Invalid expr filter {}", a)),
         }
     });
 
@@ -779,22 +771,22 @@ fn make_env() -> Env {
                     acc = env.eval(Expr::List(vec![f.clone(), acc, e]));
                 }
                 acc
-            },
+            }
             Expr::Map(a) => {
                 let mut acc = b;
                 for (k, v) in a {
                     acc = env.eval(Expr::List(vec![f.clone(), acc, k, v]));
                 }
                 acc
-            },
+            }
             Expr::Tree(a) => {
                 let mut acc = b;
                 for (k, v) in a {
                     acc = env.eval(Expr::List(vec![f.clone(), acc, k, v]));
                 }
                 acc
-            },
-            a => return Expr::error(format!("Invalid expr reduce {}", a))
+            }
+            a => return Expr::error(format!("Invalid expr reduce {}", a)),
         }
     });
 
@@ -808,28 +800,28 @@ fn make_env() -> Env {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
-            },
+            }
             (Expr::Int(a), Expr::Float(b)) => {
                 let mut list = vec![];
                 for i in a..=(b as i64) {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
-            },
+            }
             (Expr::Float(a), Expr::Int(b)) => {
                 let mut list = vec![];
                 for i in (a as i64)..=b {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
-            },
+            }
             (Expr::Float(a), Expr::Float(b)) => {
                 let mut list = vec![];
                 for i in (a as i64)..=(b as i64) {
                     list.push(Expr::Int(i));
                 }
                 Expr::List(list)
-            },
+            }
             (Expr::Symbol(a), Expr::Symbol(b)) if a.name().len() == 1 && b.name().len() == 1 => {
                 let mut list = vec![];
                 let first = a.name().chars().next().unwrap();
@@ -838,7 +830,7 @@ fn make_env() -> Env {
                     list.push(Expr::Symbol(Symbol::new(&i.to_string())));
                 }
                 Expr::List(list)
-            },
+            }
             (Expr::String(a), Expr::String(b)) if a.len() == 1 && b.len() == 1 => {
                 let mut list = vec![];
                 let first = a.chars().next().unwrap();
@@ -847,8 +839,8 @@ fn make_env() -> Env {
                     list.push(Expr::String(i.to_string()));
                 }
                 Expr::List(list)
-            },
-            (a, b) => return Expr::error(format!("Invalid expr range {} {}", a, b))
+            }
+            (a, b) => return Expr::error(format!("Invalid expr range {} {}", a, b)),
         }
     });
 
@@ -858,8 +850,8 @@ fn make_env() -> Env {
             Expr::List(mut a) => {
                 a.reverse();
                 Expr::List(a)
-            },
-            a => return Expr::error(format!("Invalid expr rev {}", a))
+            }
+            a => return Expr::error(format!("Invalid expr rev {}", a)),
         }
     });
 
@@ -871,23 +863,23 @@ fn make_env() -> Env {
             (Expr::Int(low), Expr::Int(high)) => {
                 let mut rng = rand::thread_rng();
                 Expr::Int(rng.gen_range(low..=high))
-            },
+            }
             (Expr::Float(low), Expr::Float(high)) => {
                 let mut rng = rand::thread_rng();
                 Expr::Float(rng.gen_range(low..=high))
-            },
+            }
             (Expr::Int(low), Expr::Float(high)) => {
                 let mut rng = rand::thread_rng();
                 Expr::Float(rng.gen_range(low as f64..=high))
-            },
+            }
             (Expr::Float(low), Expr::Int(high)) => {
                 let mut rng = rand::thread_rng();
                 Expr::Float(rng.gen_range(low..=high as f64))
-            },
-            (a, b) => return Expr::error(format!("Invalid expr rand {} {}", a, b))
+            }
+            (a, b) => return Expr::error(format!("Invalid expr rand {} {}", a, b)),
         }
     });
-    
+
     // env.bind_builtin("parse", |env, expr| {
     //     let a = env.eval(expr[0].clone());
     //     match a {
@@ -928,12 +920,12 @@ fn make_env() -> Env {
     //                 return e;
     //             }
     //             let asm_code = asm_code.unwrap();
-        
+
     //             let vm_code = match asm_code {
     //                 Ok(core_asm_code) => core_asm_code.assemble(CALL_STACK_SIZE).map(Ok),
     //                 Err(std_asm_code) => std_asm_code.assemble(CALL_STACK_SIZE).map(Err),
     //             }.unwrap();
-        
+
     //             let c_code = match vm_code {
     //                 Ok(vm_code) => {
     //                     sage::targets::C.build_core(&vm_code.flatten()).unwrap()
@@ -942,7 +934,7 @@ fn make_env() -> Env {
     //                     sage::targets::C.build_std(&vm_code.flatten()).unwrap()
     //                 }
     //             };
-        
+
     //             Expr::String(c_code)
     //         }
     //     }
@@ -982,8 +974,8 @@ fn make_env() -> Env {
                     code.push_str("\n");
                 }
                 Expr::String(code)
-            },
-            a => return Expr::error(format!("Invalid expr read {}", a))
+            }
+            a => return Expr::error(format!("Invalid expr read {}", a)),
         }
     });
 
@@ -1000,8 +992,8 @@ fn make_env() -> Env {
                 let mut file = std::fs::File::create(path).unwrap();
                 file.write_all(content.as_bytes()).unwrap();
                 Expr::None
-            },
-            (a, b) => return Expr::error(format!("Invalid expr write {} {}", a, b))
+            }
+            (a, b) => return Expr::error(format!("Invalid expr write {} {}", a, b)),
         }
     });
 
@@ -1019,8 +1011,8 @@ fn make_env() -> Env {
                 let stdout = String::from_utf8(output.stdout).unwrap();
                 let stderr = String::from_utf8(output.stderr).unwrap();
                 Expr::List(vec![Expr::String(stdout), Expr::String(stderr)])
-            },
-            a => return Expr::error(format!("Invalid expr shell {}", a))
+            }
+            a => return Expr::error(format!("Invalid expr shell {}", a)),
         }
     });
 
@@ -1030,22 +1022,6 @@ fn make_env() -> Env {
 fn main() {
     env_logger::init();
 
-    use serde::{Serialize, Deserialize};
-    // let mut program = PROGRAM.to_owned();
-    // #[derive(Serialize, Deserialize, Debug)]
-    // enum Test {
-    //     A(i32, String),
-    //     B(f64, String),
-    // }
-    // use sage::{lir::Compile, parse::*, targets::*};
-
-    // let frontend_code = parse_frontend(&frontend_src, path.to_str())
-    //     .unwrap_or_else(|_| panic!("Could not parse `{path:?}`"));
-
-    // let serialized = Expr::serialize(frontend_code);
-    // let x = Test::A(42, "hello".to_owned());
-    // println!("Serialized: {:?}", Expr::deserialize::<Test>(&Expr::serialize(x)).unwrap());
-
 
     let mut env = make_env();
     let args = Program::parse();
@@ -1054,9 +1030,7 @@ fn main() {
         Some(ref program) => program.clone(),
         None => {
             match args.program_name {
-                Some(ref program_name) => {
-                    std::fs::read_to_string(program_name).unwrap()
-                },
+                Some(ref program_name) => std::fs::read_to_string(program_name).unwrap(),
                 None => {
                     // Do a repl
                     let mut rl = DefaultEditor::new().expect("Failed to create editor");
@@ -1066,12 +1040,8 @@ fn main() {
                     }
                     let mut program = String::new();
                     loop {
-                        
-                        let readline = rl.readline(if program.is_empty() {
-                            ">>> "
-                        } else {
-                            "... "
-                        });
+                        let readline =
+                            rl.readline(if program.is_empty() { ">>> " } else { "... " });
                         match readline {
                             Ok(line) => {
                                 if let Err(e) = rl.add_history_entry(line.as_str()) {
@@ -1087,11 +1057,10 @@ fn main() {
                                         }
 
                                         program = String::new();
-                                    },
+                                    }
                                     Err(e) => {
                                         // Try wrapping the input in parens and parsing it first
                                         if let Ok(e) = Expr::parse(&format!("({})", program)) {
-
                                             let result = env.eval(e);
                                             if result != Expr::None {
                                                 println!("{}", result);
@@ -1111,18 +1080,18 @@ fn main() {
                                     }
                                 }
                                 // env.eval(Expr::parse(line))
-                            },
+                            }
                             Err(ReadlineError::Interrupted) => {
                                 println!("CTRL-C");
-                                break
-                            },
+                                break;
+                            }
                             Err(ReadlineError::Eof) => {
                                 println!("CTRL-D");
-                                break
-                            },
+                                break;
+                            }
                             Err(err) => {
                                 println!("Error: {}", err);
-                                break
+                                break;
                             }
                         }
                     }
@@ -1142,5 +1111,4 @@ fn main() {
             eprintln!("Parse error: {}", e);
         }
     }
-
 }
