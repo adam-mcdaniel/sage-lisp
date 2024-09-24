@@ -42,21 +42,25 @@ fn parse_int_literal<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 fn parse_float_literal<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> IResult<&'a str, Expr, E> {
-    let (input, result) = map(
-        pair(digit1, preceded(char('.'), digit1)),
-        |(a, b): (&str, &str)| Expr::Float(format!("{}.{}", a, b).parse().unwrap()),
-    )(input)?;
+    // Parse a signed float
+    let (input, is_negative) = opt(tag("-"))(input)?;
 
-    // Peek and make sure the next character is not a symbol character
-    if let Some(c) = input.chars().next() {
-        if is_symbol_char(c) {
-            return Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::Digit)));
-        }
+    // Use builtin nom double
+    let (input, result) = nom::number::complete::recognize_float(input)?;
+    // Try to parse as an integer first
+    let result: f64 = if let Ok(_i) = result.parse::<i64>() {
+        // Fail
+        return Err(nom::Err::Error(E::from_error_kind(input, ErrorKind::Digit)));
+    } else {
+        result.parse().unwrap()
+    };
+
+    if is_negative.is_some() {
+        Ok((input, (-result).into()))
+    } else {
+        Ok((input, result.into()))
     }
-
-    Ok((input, result))
 }
-
 fn parse_inner_str_double<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
     let (a, b) = escaped_transform(
         none_of("\\\""),
