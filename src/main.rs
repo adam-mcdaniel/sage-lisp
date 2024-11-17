@@ -3,7 +3,10 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use sage_lisp::*;
 // use sage::{frontend, lir::Compile, parse::*, targets::CompiledTarget, vm::*};
-use std::io::BufRead;
+use std::{
+    io::BufRead,
+    sync::{Arc, RwLock},
+};
 
 
 #[derive(Parser)]
@@ -191,6 +194,34 @@ fn make_env() -> Env {
             } else {
                 else_
             }
+        }
+    });
+
+    env.bind_builtin("new", |env, exprs| {
+        // Create a new object from the value passed
+        let value = env.eval(exprs[0].clone());
+        Expr::Object(Arc::new(RwLock::new(value)))
+    });
+    fn set(env: &mut Env, exprs: Vec<Expr>) -> Expr {
+        // Set the value of an object
+        let object = env.eval(exprs[0].clone());
+        let value = env.eval(exprs[1].clone());
+        if let Expr::Object(object) = object {
+            *object.write().unwrap() = value.clone();
+            value
+        } else {
+            Expr::error(format!("Invalid object {object} set {value}"))
+        }
+    }
+    env.bind_builtin("<-", set);
+
+    env.bind_builtin("$", |env, exprs| {
+        // Get the value of an object
+        let object = env.eval(exprs[0].clone());
+        if let Expr::Object(object) = object {
+            object.read().unwrap().clone()
+        } else {
+            Expr::error(format!("Invalid object {object} get"))
         }
     });
 
@@ -531,17 +562,33 @@ fn make_env() -> Env {
         new_env.eval(body)
     });
 
-    env.bind_builtin("get", |env, expr| {
+    fn get(env: &mut Env, expr: Vec<Expr>) -> Expr {
         let a = env.eval(expr[0].clone());
         let b = env.eval(expr[1].clone());
 
         match (a, b) {
+            (Expr::Object(obj), member) => {
+                let val = obj.read().unwrap();
+                match get(env, vec![val.clone(), member.clone()]) {
+                    Expr::None => {
+                        // Create a new object with the member as the value
+                        let new_obj = Expr::Object(Arc::new(RwLock::new(Expr::None)));
+                        let set_obj = set_attr(env, vec![val.clone(), member.clone(), new_obj.clone()]);
+                        drop(val);
+                        // Add the member to the object
+                        // Write the new object to the object
+                        *obj.write().unwrap() = set_obj;
+                        new_obj
+                    }
+                    other => other,
+                }
+                
+            }
             (Expr::String(a), Expr::Int(b)) => {
                 Expr::String(a.chars().nth(b as usize).unwrap_or('\0').to_string())
             }
             (Expr::List(a), Expr::Int(b)) => a.get(b as usize).cloned().unwrap_or(Expr::None),
             (Expr::Map(a), Expr::Symbol(b)) => {
-                // a.get(&b).cloned().unwrap_or(Expr::None)
                 a.get(&Expr::Symbol(b.clone())).cloned().unwrap_or_else(|| {
                     a.get(&Expr::String(b.name().to_owned()))
                         .cloned()
@@ -552,10 +599,52 @@ fn make_env() -> Env {
             (Expr::Tree(a), b) => a.get(&b).cloned().unwrap_or(Expr::None),
             (a, b) => return Expr::error(format!("Invalid expr get {} {}", a, b)),
         }
-    });
-    env.alias("get", "@");
+    }
+    env.bind_builtin("get", get);
+    env.alias("get", ".");
 
-    env.bind_builtin("set", |env, expr| {
+    fn method(env: &mut Env, expr: Vec<Expr>) -> Expr {
+        // Apply a method with a self parameter
+        let obj = env.eval(expr[0].clone());
+        let method_name = expr[1].clone();
+
+        // Get the param count
+        let method = get(env, vec![obj.clone(), method_name.clone()]);
+        let param_count = match &method {
+            Expr::Object(obj) => {
+                if let Expr::Function(_, params, _) = &*obj.read().unwrap() {
+                    params.len()
+                } else {
+                    return Expr::error(format!("Invalid method {method}"));
+                }
+            }
+            Expr::Function(_, params, _) => params.len(),
+            _ => return Expr::error(format!("Invalid method {method}")),
+        };
+        // Return a function that takes the rest of the arguments,
+        // and applies the method with the object as the first argument.
+        let env = env.clone();
+
+        let mut args = vec![obj.clone()];
+        let mut params = vec![];
+        for i in 1..param_count {
+            let name = Symbol::from(format!("arg{}", i - 2));
+            args.push(Expr::Symbol(name.clone()));
+            params.push(Expr::Symbol(name));
+        }
+
+        let body = method.apply(&args);
+
+        let f = Expr::Function(None, params, Box::new(body));
+        f
+
+        // let method = get(env, vec![obj.clone(), method_name]);
+        // // Apply the method with the object as the first argument, and the rest of the arguments.
+        // let mut args = vec![obj];
+        // args.extend(expr[2..].iter().cloned());
+    }
+    env.bind_builtin("@", method);
+    fn set_attr(env: &mut Env, expr: Vec<Expr>) -> Expr {
         let a = env.eval(expr[0].clone());
         let b = env.eval(expr[1].clone());
         let c = env.eval(expr[2].clone());
@@ -590,7 +679,8 @@ fn make_env() -> Env {
             }
             (a, b) => return Expr::error(format!("Invalid expr set {} {} {}", a, b, c)),
         }
-    });
+    }
+    env.bind_builtin("set", set_attr);
 
     env.bind_builtin("zip", |env, expr| {
         let a = env.eval(expr[0].clone());
@@ -983,7 +1073,6 @@ fn main() {
                             }
                             Err(ReadlineError::Interrupted) => {
                                 println!("CTRL-C");
-                                break;
                             }
                             Err(ReadlineError::Eof) => {
                                 println!("CTRL-D");

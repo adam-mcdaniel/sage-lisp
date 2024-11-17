@@ -190,8 +190,19 @@ pub fn parse_expr<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 ) -> IResult<&'a str, Expr, E> {
     preceded(
         multispace0,
-        terminated(alt((parse_compare, parse_atom)), multispace0),
+        terminated(alt((parse_assign, parse_compare, parse_atom)), multispace0),
     )(input)
+}
+
+fn parse_assign<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    input: &'a str,
+) -> IResult<&'a str, Expr, E> {
+    let (input, lhs) = parse_access(input)?;
+    let (input, _) = multispace0(input)?;
+    let (input, op) = tag("<-")(input)?;
+    let (input, _) = multispace0(input)?;
+    let (input, rhs) = parse_expr(input)?;
+    Ok((input, Expr::symbol("<-").apply(&[lhs, rhs])))
 }
 
 fn parse_compare<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -270,7 +281,7 @@ fn parse_mul<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 fn parse_pow<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> IResult<&'a str, Expr, E> {
-    let (input, lhs) = parse_access(input)?;
+    let (input, lhs) = parse_get(input)?;
     let (input, _) = multispace0(input)?;
     let (input, op) = opt(one_of("^"))(input)?;
     if let Some(op) = op {
@@ -287,32 +298,40 @@ fn parse_pow<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     }
 }
 
+fn parse_get<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    input: &'a str,
+) -> IResult<&'a str, Expr, E> {
+    // Parse a sigil `$` which dereferences an object
+    let (input, sigil) = opt(tag("$"))(input)?;
+    // Parse the expression to dereference
+    let (input, expr) = parse_access(input)?;
+    if sigil.is_none() {
+        return Ok((input, expr));
+    }
+    // Return the dereferenced expression
+    Ok((input, Expr::symbol('$').apply(&[expr])))
+}
+
 fn parse_access<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> IResult<&'a str, Expr, E> {
     let (input, lhs) = parse_atom(input)?;
     let (input, _) = multispace0(input)?;
 
-    let (input, op) = opt(one_of("@"))(input)?;
-    if op.is_some() {
+    let (input, op) = opt(one_of("@."))(input)?;
+    if let Some(op) = op {
         let (input, rhs) = parse_atom(input)?;
-        // Ok((input, match op {
-        //     '@' => Expr::symbol('@').apply(&[lhs, rhs]),
-        //     _ => unreachable!(),
-        // }))
 
-        let mut result = Expr::symbol('@').apply(&[lhs, rhs]);
+        let mut result = Expr::symbol(op).apply(&[lhs, rhs]);
         let (mut input, _) = multispace0(input)?;
 
         // See if there's another access
-        while let Ok((i, _)) = tag::<&str, &str, E>("@")(input) {
+        while let Ok((i, op)) = one_of::<&str, &str, E>("@.")(input) {
             let (i, rhs) = parse_atom(i)?;
-            result = Expr::symbol('@').apply(&[result.clone(), rhs]);
+            result = Expr::symbol(op).apply(&[result.clone(), rhs]);
             let (i, _) = multispace0(i)?;
             input = i;
         }
-
-        // println!("Result: {}", result);
 
         Ok((input, result))
     } else {
@@ -329,9 +348,9 @@ fn parse_quote<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 fn is_symbol_char(c: char) -> bool {
     c.is_alphanumeric()
         || c == '_'
+        || c == '$'
         || c == '?'
         || c == '!'
-        || c == '.'
         || c == '-'
         || c == '+'
         || c == '*'

@@ -5,8 +5,8 @@
             n * (fact n - 1)))
     (defun stirlings (n)
         (if n <= 0 1
-            (* (sqrt 2 * 3.14159265358979323846 * n)
-               ((n / 2.71828182845904523536) ^ n))))
+            (sqrt 2 * 3.14159265358979323846 * n)
+               * (pow n / 2.71828182845904523536 n)))
 
     (define cbrt   (lambda (x) (^ x (/ 1 3.0))))
     (define qurt   (lambda (x) (^ x (/ 1 4.0))))
@@ -28,8 +28,8 @@
     (defun is-even (n) (= (% n 2) 0))
     (defun is-odd (n) (= (% n 2) 1))
 
-    (println (map (\ (k v) (list k (square v))) #[x 5 y 10]))
-    (println (filter (\ (k v) (is-even v)) #[x 5 y 10]))
+    (println (map (\ (k v) (list k (square v))) [x 5 y 10]))
+    (println (filter (\ (k v) (is-even v)) [x 5 y 10]))
 
     (define l (range 1 10))
     (defun fastfact (n) (apply (eval '*) (range 1 n)))

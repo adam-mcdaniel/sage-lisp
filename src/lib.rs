@@ -455,7 +455,7 @@ impl Env {
                     let func = args.remove(0);
                     let func = self.eval(func);
 
-                    match func {
+                    match func.strip_object() {
                         Function(env, params, body) => {
                             // saved_bindings = self.bindings.clone();
                             is_in_new_env = true;
@@ -464,11 +464,15 @@ impl Env {
                             }
 
                             if params.len() != args.len() {
-                                return Expr::Err(Box::new(Expr::String(format!(
-                                    "Expected {} arguments, got {}",
-                                    params.len(),
-                                    args.len()
-                                ))));
+                                if params.len() == 0 && args.len() == 1 {
+                                    // Do nothing
+                                } else {
+                                    return Expr::Err(Box::new(Expr::String(format!(
+                                        "Expected {} arguments, got {}",
+                                        params.len(),
+                                        args.len()
+                                    ))));
+                                }
                             }
 
                             let args = args
@@ -710,6 +714,7 @@ pub enum Expr {
     /// it returns the expression itself, without evaluating it. This is useful for defining
     /// special forms, or for returning unevaluated expressions from functions, like symbols.
     Quote(Box<Expr>),
+
     /// An error.
     /// 
     /// When an error occurs during evaluation, this is used to wrap an error value
@@ -724,10 +729,14 @@ pub enum Expr {
     /// Internally, the function also keeps track of the environment in which it was defined,
     /// which allows it to capture bindings to variables defined outside the function.
     Function(Option<Box<Env>>, Vec<Expr>, Box<Expr>),
+
     /// A builtin function.
     /// 
     /// This is used to represent a function that is defined in Rust, and can be called from lisp.
     Builtin(Builtin),
+
+    /// An object.
+    Object(Arc<RwLock<Expr>>),
 }
 
 /// Convert a String to an Expr conveniently.
@@ -738,6 +747,7 @@ impl From<String> for Expr {
         Self::String(s)
     }
 }
+
 /// Convert a &str to an Expr conveniently.
 /// 
 /// This will return a Lisp expression that represents the string, not a symbol.
@@ -884,6 +894,14 @@ impl Expr {
         Self::List(result)
     }
 
+    /// Strip the object from an expression, returning the inner expression.
+    fn strip_object(&self) -> Self {
+        match self {
+            Self::Object(o) => o.read().unwrap().clone(),
+            _ => self.clone(),
+        }
+    }
+
     /// Parse a string into a Lisp expression.
     /// 
     /// If the string is a valid Lisp expression, it will return the parsed expression.
@@ -1008,6 +1026,7 @@ impl PartialOrd for Expr {
             }
             (Bool(b1), Bool(b2)) => b1.partial_cmp(b2),
             (Many(d1), Many(d2)) => d1.partial_cmp(d2),
+            (Object(r1), Object(r2)) => r1.read().unwrap().partial_cmp(&r2.read().unwrap()),
             _ => Option::None,
         }
     }
@@ -1046,6 +1065,7 @@ impl Hash for Expr {
             Err(_) => 11,
             Function(_, _, _) => 12,
             Builtin(_) => 13,
+            Object(_) => 14,
         });
 
         match self {
@@ -1066,6 +1086,7 @@ impl Hash for Expr {
                 body.hash(state);
             }
             Builtin(f) => (f as *const _ as usize).hash(state),
+            Object(r) => r.read().unwrap().hash(state),
         }
     }
 }
@@ -1136,6 +1157,7 @@ impl Display for Expr {
                 write!(f, ") {})", body)
             }
             Builtin(b) => write!(f, "<builtin {}>", b.name),
+            Object(r) => write!(f, "<object {}>", r.read().unwrap()),
         }
     }
 }
