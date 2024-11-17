@@ -1,0 +1,7 @@
+36
+testing 3628800 15!
+#[x 25 y 100]
+#[y 10]
+Factorial of 4: 24
+even: (2 4 6 8 10) odd: (1 3 5 7 9)
+Stirling's approximation for 5! = 118.0191679575901

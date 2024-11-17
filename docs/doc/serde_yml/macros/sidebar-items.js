@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["macro_directory","macro_file","macro_from_number","macro_get_field","macro_nested_enum_serde","macro_partialeq_numeric","macro_replace_placeholder"]};

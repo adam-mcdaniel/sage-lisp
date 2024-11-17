@@ -1,0 +1,170 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A macro that generates a file based on a provided value, a generator function, and an optional custom serializer."><title>generate_file in serde_yml - Rust</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-ac92e1bbe349e143.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="serde_yml" data-themes="" data-resource-suffix="" data-rustdoc-version="1.76.0 (07dca489a 2024-02-04)" data-channel="1.76.0" data-search-js="search-2b6ce74ff89ae146.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-f2adc0d6ca4d09fb.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-305769736d49e732.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-feafe1bb7466e4bd.css"></noscript><link rel="icon" href="https://kura.pro/serde_yml/images/favicon.ico"></head><body class="rustdoc macro"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="logo-container" href="../serde_yml/index.html"><img src="https://kura.pro/serde_yml/images/logos/serde_yml.svg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../serde_yml/index.html"><img src="https://kura.pro/serde_yml/images/logos/serde_yml.svg" alt="logo"></a><h2><a href="../serde_yml/index.html">serde_yml</a><span class="version">0.0.10</span></h2></div><div class="sidebar-elems"></div></nav><div class="sidebar-resizer"></div>
+    <main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../serde_yml/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Macro <a href="index.html">serde_yml</a>::<wbr><a class="macro" href="#">generate_file</a><button id="copy-path" title="Copy item path to clipboard"><img src="../static.files/clipboard-7571035ce49a181d.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="src" href="../src/serde_yml/macros/macro_file.rs.html#180-210">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><span class="macro">macro_rules! </span>generate_file {
+    (<span class="macro-nonterminal">$file_type</span>:expr, <span class="macro-nonterminal">$value</span>:expr, <span class="macro-nonterminal">$generator</span>:expr, <span class="macro-nonterminal">$serializer</span>:expr) =&gt; { ... };
+    (<span class="macro-nonterminal">$file_type</span>:expr, <span class="macro-nonterminal">$value</span>:expr, <span class="macro-nonterminal">$generator</span>:expr) =&gt; { ... };
+}</pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A macro that generates a file based on a provided value, a generator function, and an optional custom serializer.</p>
+<p>The macro takes four parameters: <code>$file_type:expr</code>, <code>$value:expr</code>, <code>$generator:expr</code>, and an optional <code>$serializer:expr</code>.</p>
+<ul>
+<li><code>$file_type:expr</code>: A string literal representing the type of the file to be generated (e.g., “yaml”, “json”, “txt”).</li>
+<li><code>$value:expr</code>: A reference to a value.</li>
+<li><code>$generator:expr</code>: A closure that takes a string slice (the serialized content) and generates the file.</li>
+<li><code>$serializer:expr</code>: An optional custom serializer function that takes a reference to the value and returns a <code>Result&lt;String, String&gt;</code>.</li>
+</ul>
+<p>The macro attempts to generate the file using the provided <code>$generator</code> function. If an error occurs during the generation process, it prints an error message to the standard error stream.</p>
+<h2 id="examples"><a href="#examples">Examples</a></h2><h3 id="yaml-example"><a href="#yaml-example">YAML Example</a></h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::fs;
+<span class="kw">use </span>serde::Serialize;
+<span class="kw">use </span>serde_yml::to_string <span class="kw">as </span>to_yaml_string;
+<span class="kw">use </span>serde_yml::generate_file;
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>MyData {
+    key: String,
+    value: String,
+    nested: NestedData,
+    items: Vec&lt;Item&gt;,
+}
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>NestedData {
+    id: u32,
+    description: String,
+}
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>Item {
+    name: String,
+    quantity: u32,
+    price: f64,
+}
+
+<span class="kw">let </span>value = MyData {
+    key: <span class="string">"example"</span>.to_string(),
+    value: <span class="string">"Hello, Serde YML!"</span>.to_string(),
+    nested: NestedData {
+        id: <span class="number">1</span>,
+        description: <span class="string">"This is a nested structure"</span>.to_string(),
+    },
+    items: <span class="macro">vec!</span>[
+        Item {
+            name: <span class="string">"Item1"</span>.to_string(),
+            quantity: <span class="number">10</span>,
+            price: <span class="number">99.99</span>,
+        },
+        Item {
+            name: <span class="string">"Item2"</span>.to_string(),
+            quantity: <span class="number">5</span>,
+            price: <span class="number">9.99</span>,
+        },
+    ],
+};
+
+<span class="macro">generate_file!</span>(<span class="string">"yaml"</span>, <span class="kw-2">&amp;</span>value, |content| {
+    fs::write(<span class="string">"output.yaml"</span>, content)
+});
+fs::remove_file(<span class="string">"output.yaml"</span>).unwrap();</code></pre></div>
+<h3 id="json-example"><a href="#json-example">JSON Example</a></h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::fs;
+<span class="kw">use </span>serde::Serialize;
+<span class="kw">use </span>serde_json::to_string <span class="kw">as </span>to_json_string;
+<span class="kw">use </span>serde_yml::generate_file;
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>MyData {
+    key: String,
+    value: String,
+    nested: NestedData,
+    items: Vec&lt;Item&gt;,
+}
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>NestedData {
+    id: u32,
+    description: String,
+}
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>Item {
+    name: String,
+    quantity: u32,
+    price: f64,
+}
+
+<span class="kw">let </span>value = MyData {
+    key: <span class="string">"example"</span>.to_string(),
+    value: <span class="string">"Hello, Serde JSON!"</span>.to_string(),
+    nested: NestedData {
+        id: <span class="number">1</span>,
+        description: <span class="string">"This is a nested structure"</span>.to_string(),
+    },
+    items: <span class="macro">vec!</span>[
+        Item {
+            name: <span class="string">"Item1"</span>.to_string(),
+            quantity: <span class="number">10</span>,
+            price: <span class="number">99.99</span>,
+        },
+        Item {
+            name: <span class="string">"Item2"</span>.to_string(),
+            quantity: <span class="number">5</span>,
+            price: <span class="number">9.99</span>,
+        },
+    ],
+};
+
+<span class="macro">generate_file!</span>(<span class="string">"json"</span>, <span class="kw-2">&amp;</span>value, |content| {
+    fs::write(<span class="string">"output.json"</span>, content)
+});
+fs::remove_file(<span class="string">"output.json"</span>).unwrap();</code></pre></div>
+<h3 id="txt-example"><a href="#txt-example">TXT Example</a></h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::fs;
+<span class="kw">use </span>serde::Serialize;
+<span class="kw">use </span>serde_yml::generate_file;
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>MyData {
+    key: String,
+    value: String,
+    nested: NestedData,
+    items: Vec&lt;Item&gt;,
+}
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>NestedData {
+    id: u32,
+    description: String,
+}
+
+<span class="attr">#[derive(Serialize, Debug)]
+</span><span class="kw">struct </span>Item {
+    name: String,
+    quantity: u32,
+    price: f64,
+}
+
+<span class="kw">let </span>value = MyData {
+    key: <span class="string">"example"</span>.to_string(),
+    value: <span class="string">"Hello, Serde TXT!"</span>.to_string(),
+    nested: NestedData {
+        id: <span class="number">1</span>,
+        description: <span class="string">"This is a nested structure"</span>.to_string(),
+    },
+    items: <span class="macro">vec!</span>[
+        Item {
+            name: <span class="string">"Item1"</span>.to_string(),
+            quantity: <span class="number">10</span>,
+            price: <span class="number">99.99</span>,
+        },
+        Item {
+            name: <span class="string">"Item2"</span>.to_string(),
+            quantity: <span class="number">5</span>,
+            price: <span class="number">9.99</span>,
+        },
+    ],
+};
+
+<span class="macro">generate_file!</span>(<span class="string">"txt"</span>, <span class="kw-2">&amp;</span>value, |content| {
+    <span class="kw">let </span>txt_string = <span class="macro">format!</span>(<span class="string">"{:?}"</span>, content);
+    fs::write(<span class="string">"output.txt"</span>, txt_string)
+});
+fs::remove_file(<span class="string">"output.txt"</span>).unwrap();</code></pre></div>
+</div></details></section></div></main></body></html>

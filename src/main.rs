@@ -793,55 +793,34 @@ fn make_env() -> Env {
     env.bind_builtin("range", |env, expr| {
         let a = env.eval(expr[0].clone());
         let b = env.eval(expr[1].clone());
-        match (a, b) {
-            (Expr::Int(a), Expr::Int(b)) => {
-                let mut list = vec![];
-                for i in a..=b {
-                    list.push(Expr::Int(i));
-                }
-                Expr::List(list)
-            }
-            (Expr::Int(a), Expr::Float(b)) => {
-                let mut list = vec![];
-                for i in a..=(b as i64) {
-                    list.push(Expr::Int(i));
-                }
-                Expr::List(list)
-            }
-            (Expr::Float(a), Expr::Int(b)) => {
-                let mut list = vec![];
-                for i in (a as i64)..=b {
-                    list.push(Expr::Int(i));
-                }
-                Expr::List(list)
-            }
-            (Expr::Float(a), Expr::Float(b)) => {
-                let mut list = vec![];
-                for i in (a as i64)..=(b as i64) {
-                    list.push(Expr::Int(i));
-                }
-                Expr::List(list)
-            }
-            (Expr::Symbol(a), Expr::Symbol(b)) if a.name().len() == 1 && b.name().len() == 1 => {
-                let mut list = vec![];
-                let first = a.name().chars().next().unwrap();
-                let last = b.name().chars().next().unwrap();
-                for i in first..=last {
-                    list.push(Expr::Symbol(Symbol::new(&i.to_string())));
-                }
-                Expr::List(list)
-            }
-            (Expr::String(a), Expr::String(b)) if a.len() == 1 && b.len() == 1 => {
-                let mut list = vec![];
-                let first = a.chars().next().unwrap();
-                let last = b.chars().next().unwrap();
-                for i in first..=last {
-                    list.push(Expr::String(i.to_string()));
-                }
-                Expr::List(list)
-            }
-            (a, b) => return Expr::error(format!("Invalid expr range {} {}", a, b)),
+        // Check if there is a step
+        let c = if expr.len() == 3 {
+            env.eval(expr[2].clone())
+        } else {
+            Expr::Int(1)
+        };
+
+        let (a, b) = match (a, b) {
+                (Expr::Int(a), Expr::Int(b)) => (a, b),
+                (Expr::Float(a), Expr::Float(b)) => (a as i64, b as i64),
+                (Expr::Int(a), Expr::Float(b)) => (a, b as i64),
+                (Expr::Float(a), Expr::Int(b)) => (a as i64, b),
+                (a, b) => return Expr::error(format!("Invalid expr range {} {}", a, b)),
+        };
+
+        let c = match c {
+            Expr::Int(c) => c,
+            Expr::Float(c) => c as i64,
+            c => return Expr::error(format!("Invalid expr range {}", c)),
+        };
+
+        let mut list = vec![];
+        let mut i = a;
+        while i <= b {
+            list.push(Expr::Int(i));
+            i += c;
         }
+        Expr::List(list)
     });
 
     env.bind_builtin("rev", |env, expr| {
@@ -879,85 +858,6 @@ fn make_env() -> Env {
             (a, b) => return Expr::error(format!("Invalid expr rand {} {}", a, b)),
         }
     });
-
-    // env.bind_builtin("parse", |env, expr| {
-    //     let a = env.eval(expr[0].clone());
-    //     match a {
-    //         Expr::String(frontend_src) => {
-    //             match parse_frontend_minimal(&frontend_src, Some("stdin")) {
-    //                 Ok(frontend_code) => {
-    //                     Expr::serialize(frontend_code)
-    //                 },
-    //                 Err(e) => Expr::error(e)
-    //             }
-    //         },
-    //         a => return Expr::error(format!("Invalid expr parse {}", a))
-    //     }
-    // });
-    // env.bind_builtin("parse-big", |env, expr| {
-    //     let a = env.eval(expr[0].clone());
-    //     match a {
-    //         Expr::String(frontend_src) => {
-    //             match parse_frontend(&frontend_src, Some("stdin")) {
-    //                 Ok(frontend_code) => {
-    //                     Expr::serialize(frontend_code)
-    //                 },
-    //                 Err(e) => Expr::error(e)
-    //             }
-    //         },
-    //         a => return Expr::error(format!("Invalid expr parse {}", a))
-    //     }
-    // });
-
-    // env.bind_builtin("compile", |env, expr| {
-    //     let frontend_code = Expr::deserialize::<sage::lir::Expr>(&env.eval(expr[0].clone())).map_err(|e| Expr::error(format!("Invalid AST: {e}")));
-
-    //     match frontend_code {
-    //         Err(e) => e,
-    //         Ok(frontend_code) => {
-    //             let asm_code = frontend_code.compile().map_err(|e| Expr::error(format!("Invalid AST: {e}")));
-    //             if let Err(e) = asm_code {
-    //                 return e;
-    //             }
-    //             let asm_code = asm_code.unwrap();
-
-    //             let vm_code = match asm_code {
-    //                 Ok(core_asm_code) => core_asm_code.assemble(CALL_STACK_SIZE).map(Ok),
-    //                 Err(std_asm_code) => std_asm_code.assemble(CALL_STACK_SIZE).map(Err),
-    //             }.unwrap();
-
-    //             let c_code = match vm_code {
-    //                 Ok(vm_code) => {
-    //                     sage::targets::C.build_core(&vm_code.flatten()).unwrap()
-    //                 }
-    //                 Err(vm_code) => {
-    //                     sage::targets::C.build_std(&vm_code.flatten()).unwrap()
-    //                 }
-    //             };
-
-    //             Expr::String(c_code)
-    //         }
-    //     }
-    // });
-
-    // env.bind_builtin("asm", |env, expr| {
-    //     let frontend_code = Expr::deserialize::<sage::lir::Expr>(&env.eval(expr[0].clone())).map_err(|e| Expr::error(format!("Invalid AST: {e}")));
-
-    //     match frontend_code {
-    //         Err(e) => e,
-    //         Ok(frontend_code) => {
-    //             let asm_code = frontend_code.compile().map_err(|e| Expr::error(format!("Invalid AST: {e}")));
-    //             if let Err(e) = asm_code {
-    //                 return e;
-    //             }
-    //             let asm_code = asm_code.unwrap();
-    //             match asm_code {
-    //                 Ok(core_asm_code) => Expr::serialize(core_asm_code.code),
-    //                 Err(std_asm_code) => Expr::serialize(std_asm_code.code),
-    //             }
-    //         }
-    //     }
-    // });
 
     env.bind_builtin("read", |env, expr| {
         // Read a file
@@ -1100,6 +1000,7 @@ fn main() {
             }
         }
     };
+    
     match Expr::parse(&mut program) {
         Ok(e) => {
             let result = env.eval(e);

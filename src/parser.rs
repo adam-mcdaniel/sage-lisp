@@ -163,6 +163,11 @@ fn parse_tree<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     )(input)
 }
 
+/// Parse a program from a string.
+/// This will directly use the nom parser combinator library to parse the input string,
+/// and return the parsed expression.
+/// 
+/// It's recommended to use the parsing method for `Expr` instead of this method.
 pub fn parse_program<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> IResult<&'a str, Expr, E> {
@@ -175,6 +180,11 @@ pub fn parse_program<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     Ok((input, exprs))
 }
 
+/// Parse a program from a string.
+/// This will directly use the nom parser combinator library to parse the input string,
+/// and return the parsed expression.
+/// 
+/// It's recommended to use the parsing method for `Expr` instead of this method.
 pub fn parse_expr<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> IResult<&'a str, Expr, E> {

@@ -1,0 +1,4 @@
+5! = 120
+Stirling's approx. for 5! = 118.019297959714
+Unsorted list: (5 3 7 2 8 1 9 4 6)
+Sorted list: (1 2 3 4 5 6 7 8 9)
