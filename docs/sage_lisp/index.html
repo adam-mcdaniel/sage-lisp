@@ -1,0 +1,118 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Sage-Lisp"><title>sage_lisp - Rust</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-ac92e1bbe349e143.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="sage_lisp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.76.0 (07dca489a 2024-02-04)" data-channel="1.76.0" data-search-js="search-2b6ce74ff89ae146.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-f2adc0d6ca4d09fb.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-305769736d49e732.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-feafe1bb7466e4bd.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../sage_lisp/index.html">sage_lisp</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block">
+            <li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li></ul></section></div></nav><div class="sidebar-resizer"></div>
+    <main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../sage_lisp/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">sage_lisp</a><button id="copy-path" title="Copy item path to clipboard"><img src="../static.files/clipboard-7571035ce49a181d.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="src" href="../src/sage_lisp/lib.rs.html#1-1141">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="sage-lisp"><a href="#sage-lisp">Sage-Lisp</a></h2>
+<ul>
+<li><strong>Author</strong>: Adam McDaniel</li>
+<li><strong>GitHub</strong>: <a href="https://github.com/adam-mcdaniel/sage-lisp">adam-mcdaniel/sage-lisp</a></li>
+<li><strong>License</strong>: MIT</li>
+</ul>
+<p>Sage-Lisp is a simple core lisp interpreter written in Rust,
+that can be expanded to include new functionality with built-in functions.</p>
+<p>It’s designed such that you can provide your own standard library of functions,
+implemented in Rust or in Lisp, and evaluate lisp expressions with your own
+standard conventions.</p>
+<p>It works well as an embedded language for data transformation, where you can
+import data into the interpreter (using Serde), perform transformations on it, and then
+export the data back out into a format that you can use in your application.</p>
+<h3 id="features"><a href="#features">Features</a></h3>
+<ul>
+<li><strong>Simple Lisp Interpreter</strong>: A simple core lisp interpreter that can evaluate lisp expressions.</li>
+<li><strong>Built-in Functions</strong>: Extend the language with new functionality using built-in functions.</li>
+<li><strong>Symbol Interning</strong>: Symbols are interned to ensure that they are unique and fast to compare.</li>
+<li><strong>Tail Recursion</strong>: Uses tail recursion to evaluate deeply nested function calls without stack overflow.</li>
+<li><strong>Lazy Evaluation</strong>: Supports lazy evaluation of expressions, for defining special forms.</li>
+<li><strong>Serde Integration</strong>: Serialize and deserialize lisp expressions using Serde.</li>
+<li><strong>Error Handling</strong>: Provides helpful error messages for parsing and evaluation errors.</li>
+<li><strong>Expanded Syntax</strong>: Introduces infix operators, code block syntax, syntax for hashmaps and ordered maps, and more.</li>
+<li><strong>Customizable</strong>: Define your own standard library of functions and variables, and override the default behavior.</li>
+</ul>
+<h3 id="example-lisp-syntax"><a href="#example-lisp-syntax">Example Lisp Syntax</a></h3>
+<p>The example below shows some of the syntax that is supported by the interpreter,
+along with some of the built-in functions that are provided when the crate is
+used as an executable.</p>
+<div class="example-wrap"><pre class="language-lisp"><code>;; Define a function that calculates the factorial of a number
+(defun fact (n) 
+    (if n &lt;= 0
+        1
+        n * (fact n - 1)))
+;; Stirling&#39;s approximation for the factorial
+(defun stirlings (n)
+    (if n &lt;= 0 1
+        (* (sqrt 2 * 3.14159265358979323846 * n)
+           ((n / 2.71828182845904523536) ^ n))))
+;; Perform a quicksort on a list of numbers
+(defun quicksort (lst)
+    (if (&lt;= (len lst) 1) lst {
+        (define pivot (get lst (/ (len lst) 2)))
+        (define less (filter (\(x) (&lt; x pivot)) lst))
+        (define equal (filter (\(x) (= x pivot)) lst))
+        (define greater (filter (\(x) (&gt; x pivot)) lst))
+        (+ (quicksort less) equal (quicksort greater))}))
+</code></pre></div><h3 id="example-embedding"><a href="#example-embedding">Example Embedding</a></h3>
+<p>Below is an example of how you can embed the interpreter into your application,
+with your own standard library of functions and variables.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// Import the necessary types and traits for the interpreter.
+</span><span class="kw">use </span>sage_lisp::{Expr, Env};
+ 
+<span class="comment">// Create a new environment
+</span><span class="kw">fn </span>make_core_env() -&gt; Env {
+    <span class="comment">// Create a new environment
+    </span><span class="kw">let </span><span class="kw-2">mut </span>env = Env::new();
+ 
+    <span class="comment">// Create a function that adds two numbers
+    </span>env.bind_builtin(<span class="string">"+"</span>, |env, exprs| {
+        <span class="kw">let </span><span class="kw-2">mut </span>sum = Expr::default();
+        <span class="kw">for </span>e <span class="kw">in </span>exprs {
+            <span class="comment">// Evaluate the supplied argument in the environment
+            </span><span class="kw">let </span>e = env.eval(e.clone());
+            <span class="comment">// Match the expression to the sum
+            </span><span class="kw">match </span>(sum, e) {
+                (Expr::None, b) =&gt; sum = b,
+                (Expr::Int(a), Expr::Int(b)) =&gt; sum = Expr::Int(a + b),
+                (Expr::Float(a), Expr::Float(b)) =&gt; sum = Expr::Float(a + b),
+                (Expr::Int(a), Expr::Float(b)) =&gt; sum = Expr::Float(a <span class="kw">as </span>f64 + b),
+                (Expr::Float(a), Expr::Int(b)) =&gt; sum = Expr::Float(a + b <span class="kw">as </span>f64),
+                (Expr::String(a), Expr::String(b)) =&gt; sum = Expr::String(<span class="macro">format!</span>(<span class="string">"{}{}"</span>, a, b)),
+                (Expr::List(a), Expr::List(b)) =&gt; {
+                    <span class="kw">let </span><span class="kw-2">mut </span>list = a.clone();
+                    list.extend(b);
+                    sum = Expr::List(list);
+                }
+                (Expr::List(a), b) =&gt; {
+                    <span class="kw">let </span><span class="kw-2">mut </span>list = a.clone();
+                    list.push(b);
+                    sum = Expr::List(list);
+                }
+                <span class="comment">// Return an error if the expression is invalid
+                </span>(a, b) =&gt; <span class="kw">return </span>Expr::error(<span class="macro">format!</span>(<span class="string">"Invalid expr {} + {}"</span>, a, b)),
+            }
+        }
+        sum
+    });
+    <span class="comment">// Create a function that prints a string
+    </span>env.bind_builtin(<span class="string">"println"</span>, |env, exprs| {
+        <span class="kw">for </span>e <span class="kw">in </span>exprs {
+            <span class="comment">// Evaluate the supplied argument in the environment
+            </span><span class="kw">let </span>e = env.eval(e.clone());
+            <span class="comment">// Print the expression
+            </span><span class="kw">match </span>e {
+                Expr::String(s) =&gt; <span class="macro">print!</span>(<span class="string">"{}"</span>, s),
+                Expr::Symbol(s) =&gt; <span class="macro">print!</span>(<span class="string">"{}"</span>, s.name()),
+                <span class="kw">_ </span>=&gt; <span class="macro">print!</span>(<span class="string">"{}"</span>, e),
+            }
+        }
+        <span class="macro">println!</span>();
+        Expr::None
+    });
+    env
+}
+ 
+<span class="kw">fn </span>main() {
+    <span class="comment">// Create a new environment with our custom standard library
+    </span><span class="kw">let </span><span class="kw-2">mut </span>env = make_core_env();
+ 
+    <span class="comment">// Evaluate a lisp expression in the environment
+    </span>env.eval_str(<span class="string">"{ (println 1 + 2) (println (+ 2 2)) }"</span>).unwrap();
+}</code></pre></div>
+</div></details><h2 id="structs" class="section-header"><a href="#structs">Structs</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.Builtin.html" title="struct sage_lisp::Builtin">Builtin</a></div><div class="desc docblock-short">A builtin function that can be called from the lisp environment.</div></li><li><div class="item-name"><a class="struct" href="struct.Env.html" title="struct sage_lisp::Env">Env</a></div><div class="desc docblock-short">An environment for evaluating lisp expressions</div></li><li><div class="item-name"><a class="struct" href="struct.Symbol.html" title="struct sage_lisp::Symbol">Symbol</a></div><div class="desc docblock-short">A symbol that uses string interning</div></li></ul><h2 id="enums" class="section-header"><a href="#enums">Enums</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.Expr.html" title="enum sage_lisp::Expr">Expr</a></div><div class="desc docblock-short">A lisp expression to be evaluated</div></li></ul></section></div></main></body></html>
