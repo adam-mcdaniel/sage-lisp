@@ -175,6 +175,8 @@ use lazy_static::lazy_static;
 mod parser;
 pub use parser::*;
 
+pub mod extensions;
+
 
 ///////////////////////////////////////////////////////////////
 // SYMBOLS AND SYMBOL TABLE
@@ -270,6 +272,17 @@ impl PartialEq for Symbol {
     }
 }
 
+/// Add partial equality for symbols and strings
+/// 
+/// This allows you to compare a symbol to a string using the `==` operator.
+impl<T: AsRef<str>> PartialEq<T> for Symbol {
+    #[inline]
+    fn eq(&self, other: &T) -> bool {
+        *self.0 == other.as_ref()
+    }
+}
+
+
 /// Compare two symbols for ordering.
 /// 
 /// If the two symbols are the same object in memory, they are equal.
@@ -281,6 +294,14 @@ impl PartialOrd for Symbol {
             return Some(std::cmp::Ordering::Equal);
         }
         self.0.partial_cmp(&other.0)
+    }
+}
+
+/// Print a symbol as regular output
+impl Display for Symbol {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -894,12 +915,24 @@ impl Expr {
         Self::List(result)
     }
 
+    /// Create a builtin function from a Rust function pointer.
+    #[inline]
+    pub fn builtin(name: &'static str, f: fn(&mut Env, Vec<Self>) -> Self) -> Self {
+        Self::Builtin(Builtin::new(f, name))
+    }
+
     /// Strip the object from an expression, returning the inner expression.
-    fn strip_object(&self) -> Self {
+    pub fn strip_object(&self) -> Self {
         match self {
             Self::Object(o) => o.read().unwrap().clone(),
             _ => self.clone(),
         }
+    }
+
+    /// Create a many expression from a list of expressions.
+    #[inline]
+    pub fn many(exprs: Vec<Self>) -> Self {
+        Self::Many(Arc::new(exprs))
     }
 
     /// Parse a string into a Lisp expression.

@@ -1,4 +1,12 @@
 {
+    (mod.use math)
+    (mod.use io)
+    (mod.use fn)
+    (mod.use env)
+    (mod.use proc)
+    (mod.use list)
+    (mod.use fmt)
+
     (defun fact (n) 
         (if n <= 0
             1
