@@ -57,7 +57,7 @@ fn get_system_env(_env: &mut Env, _args: Vec<Expr>) -> Expr {
 
 fn get_system_args(_env: &mut Env, _args: Vec<Expr>) -> Expr {
     // Get the arguments supplied to the program
-    let args: Vec<Expr> = std::env::args().map(Expr::String).collect();
+    let args: Vec<Expr> = std::env::args().skip(1).map(Expr::String).collect();
     return Expr::List(args);
 }
 
